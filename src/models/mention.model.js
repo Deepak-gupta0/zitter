@@ -1,0 +1,21 @@
+import mongoose, { Schema } from "mongoose";
+
+const mentionSchema = new Schema({
+  post: {
+    type: Schema.Types.ObjectId,
+    ref: "Post",
+    required: true,
+    index: true,
+  },
+  mentionedUser: {
+    type: Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+    index: true,
+  },
+}, {timestamps: true});
+
+mentionSchema.index({ post: 1, mentionedUser: 1 }, { unique: true });
+mentionSchema.index({ mentionedUser: 1, createdAt: -1 });
+
+export const Mention = mongoose.model("Mention", mentionSchema);
