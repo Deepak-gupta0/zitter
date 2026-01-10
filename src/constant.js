@@ -1,1 +1,1 @@
-export const DB_NAME = "twitter-app"
+export const DB_NAME = "zitter-app"
