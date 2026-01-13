@@ -1,10 +1,39 @@
 import { Router } from "express";
-import { getUser, loginUser, registerUser } from "../controllers/user.controller.js";
+import { verifyJwt } from "../middlewares/auth.middleware.js";
+import { checkIsActive } from "../middlewares/isActive.middleware.js";
+import {
+  registerUser,
+  loginUser,
+  logoutUser,
+  refreshAccessToken,
+  getCurrentUser,
+  getUserProfile,
+  searchUsers,
+  updateAccountDetails,
+  changePassword,
+  updateAvatar,
+  updateCoverImage,
+  deleteAccount,
+} from "../controllers/user.controller.js";
 
 const router = Router();
 
-router.route("/").get(getUser);
+// 🌍 PUBLIC ROUTES
+router.post("/register", registerUser);
+router.post("/login", loginUser);
+router.post("/refresh-token", refreshAccessToken);
+router.get("/profile/:username", getUserProfile);
+router.get("/search", searchUsers);
 
-router.route("/register").post(registerUser);
-router.route("/login").post(loginUser);
+// 🔐 PROTECTED ROUTES
+router.use(verifyJwt, checkIsActive);
+
+router.post("/logout", logoutUser);
+router.get("/me", getCurrentUser);
+router.patch("/profile", updateAccountDetails);
+router.patch("/password", changePassword);
+router.patch("/avatar", updateAvatar);
+router.patch("/cover-image", updateCoverImage);
+router.delete("/account", deleteAccount);
+
 export default router;
