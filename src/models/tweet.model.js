@@ -16,7 +16,7 @@ const mediaSchema = new mongoose.Schema({
   duration: Number,
 }, {_id : false});
 
-const postSchema = new mongoose.Schema(
+const tweetSchema = new mongoose.Schema(
   {
     media: {
       type: [mediaSchema],
@@ -43,7 +43,7 @@ const postSchema = new mongoose.Schema(
 
     replyCount: { type: Number, default: 0, min: 0 },
     repostCount: { type: Number, default: 0, min: 0 },
-    likeCount: { type: Number, default: 0, min: 0 },
+    likesCount: { type: Number, default: 0, min: 0 },
     viewCount: { type: Number, default: 0, min: 0 },
 
     isPublished: {
@@ -62,4 +62,4 @@ postSchema.index({ "owner": 1, "createdAt": -1 })
 
 postSchema.plugin(mongooseAggregatePaginate);
 
-export const Post = mongoose.model("Post", postSchema);
+export const Tweet = mongoose.model("Tweet", tweetSchema);

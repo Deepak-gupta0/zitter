@@ -11,7 +11,7 @@ const likeSchema = new mongoose.Schema(
     targetType: {
       type: String,
       required: true,
-     enum: ["Post", "Comment"],
+     enum: ["Tweet", "Comment"],
     },
     likedBy: {
       type: mongoose.Schema.Types.ObjectId,

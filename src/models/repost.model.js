@@ -9,7 +9,7 @@ const repostSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    user: {
+    user: { //jisne repost kia hai
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,

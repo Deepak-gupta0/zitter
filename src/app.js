@@ -11,6 +11,7 @@ app.use(
 );
 
 import userRoute from "./routes/user.route.js"
+import tweetRoute from "./routes/user.route.js"
 import cookieParser from "cookie-parser";
 
 app.use(express.json({limit: "16kb"}))
@@ -19,5 +20,6 @@ app.use(express.static("public"))
 app.use(cookieParser())
 
 app.use("/api/v1/users", userRoute)
+app.use("/api/v1/tweets", tweetRoute)
 
 export default app;
