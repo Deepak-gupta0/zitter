@@ -2,8 +2,10 @@ import mongoose from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { Tweet } from "../models/tweet.model.js";
-import { Subscription } from "../models/subscription.model.js";
-
+// import { Subscription } from "../models/subscription.model.js";
+import { uploadOnCloudinary } from "../utils/Cloudinary.js";
+import { ApiResponse } from "../utils/ApiResponse.js";
+import { User } from "../models/user.model.js";
 
 //PUBLIC CONTROLLERS
 const getUserTweets = asyncHandler(async (req, res) => {
@@ -39,6 +41,7 @@ const getUserTweets = asyncHandler(async (req, res) => {
         ],
       },
     },
+    {$unwind : "$owner"},
     {
       $lookup: {
         from: "comments",
@@ -77,6 +80,12 @@ const getUserTweets = asyncHandler(async (req, res) => {
       },
     },
   ]);
+
+  return res
+  .status(200)
+  .json(
+    new ApiResponse(200, tweets, "Users tweets fetched successfully.")
+  )
 });
 
 const getHomeTweets = asyncHandler(async (req, res) => {
@@ -94,7 +103,7 @@ const getHomeTweets = asyncHandler(async (req, res) => {
       follower: req.user._id,
     }).select("following");
 
-    const ownerIds = followingDocs.map(f => f.following);
+    const ownerIds = followingDocs.map((f) => f.following);
     ownerIds.push(req.user._id);
 
     matchStage.owner = { $in: ownerIds };
@@ -137,9 +146,7 @@ const getHomeTweets = asyncHandler(async (req, res) => {
     tweets.pop();
   }
 
-  const nextCursor = hasMore
-    ? tweets[tweets.length - 1]._id
-    : null;
+  const nextCursor = hasMore ? tweets[tweets.length - 1]._id : null;
 
   return res.status(200).json(
     new ApiResponse(
@@ -153,7 +160,6 @@ const getHomeTweets = asyncHandler(async (req, res) => {
     )
   );
 });
-
 
 const getTrendingTweets = asyncHandler(async (req, res) => {
   const limit = Number(req.query.limit) || 20;
@@ -172,10 +178,10 @@ const getTrendingTweets = asyncHandler(async (req, res) => {
       $addFields: {
         trendingScore: {
           $add: [
-            { $multiply: { $likesCount: 3 } },
-            { $multiply: { $repostCount: 4 } },
-            { $multiply: { $replyCount: 2 } },
-            { $multiply: { $viewCount: 0.1 } },
+            { $multiply: [ "$likesCount", 3 ] },
+            { $multiply: [ "$repostCount", 4 ] },
+            { $multiply: [ "$replyCount", 2 ] },
+            { $multiply: ["$viewCount", 0.1 ] },
           ],
         },
       },
@@ -286,14 +292,170 @@ const getTweetById = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, tweet[0], "Tweet found successfully"));
 });
 
-
 //PROTECTED CONTROLLERS
-const createTweet = asyncHandler(async(req, res) => {
-  const {content} = req.body; 
-  const mediaLocalPath = 
-  // if(!content || !content.trim()){
-  //   throw new ApiError(400, )
-  // }
+const createTweet = asyncHandler(async (req, res) => {
+  if (!req.user?._id) {
+    throw new ApiError(401, "Unauthorized request");
+  }
 
+  const files = req.files || [];
+  const content = req.body.content?.trim() || "";
+
+  if (!content && files.length === 0) {
+    throw new ApiError(400, "Tweet cannot be empty");
+  }
+
+  if (files.length > 5) {
+    throw new ApiError(400, "Maximum 5 media files allowed");
+  }
+
+  const media = [];
+
+  for (const file of files) {
+    const result = await uploadOnCloudinary(file.path, "tweets");
+
+    const isVideo = file.mimetype.startsWith("video");
+    const isGif = file.mimetype === "image/gif";
+
+    media.push({
+      type: isVideo ? "video" : isGif ? "git" : "image",
+      url: result.secure_url,
+      publicId: result.public_id,
+      height: result.height,
+      width: result.width,
+      duration: result.duration,
+    });
+  }
+
+  const tweet = await Tweet.create({
+    owner: req.user._id,
+    media: media.length ? media : undefined,
+    content,
+  });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, tweet, "Tweet created successfully."));
+});
+
+const updateTweet = asyncHandler(async (req, res) => {
+  // 1️⃣ Auth check
+  if (!req.user?._id) {
+    throw new ApiError(401, "Unauthorized request");
+  }
+
+  const { tweetId } = req.params;
+  const { content } = req.body;
+
+  // 2️⃣ Validate tweetId
+  if (!mongoose.Types.ObjectId.isValid(tweetId)) {
+    throw new ApiError(400, "Invalid tweet id");
+  }
+
+  // 3️⃣ Validate content
+  if (!content || !content.trim()) {
+    throw new ApiError(400, "Tweet content cannot be empty");
+  }
+
+  // 4️⃣ Update tweet (owner check included)
+  const tweet = await Tweet.findOneAndUpdate(
+    { _id: tweetId, owner: req.user._id },
+    { content: content.trim() },
+    {
+      new: true,
+      runValidators: true,
+    }
+  );
+
+  // 5️⃣ Tweet not found or not owner
+  if (!tweet) {
+    throw new ApiError(404, "Tweet not found or access denied");
+  }
+
+  // 6️⃣ Success response
+  return res
+    .status(200)
+    .json(new ApiResponse(200, tweet, "Tweet updated successfully"));
+});
+
+const deleteTweet = asyncHandler(async (req, res) => {
+  // 1️⃣ Auth check
+  if (!req.user?._id) {
+    throw new ApiError(401, "Unauthorized request");
+  }
+
+  const { tweetId } = req.params;
+
+  // 2️⃣ Validate tweetId
+  if (!mongoose.Types.ObjectId.isValid(tweetId)) {
+    throw new ApiError(400, "Invalid tweet id");
+  }
+
+  // 3️⃣ Delete tweet (owner check included)
+  const tweet = await Tweet.findOneAndDelete({
+    _id: tweetId,
+    owner: req.user._id,
+  });
+
+  // 4️⃣ Tweet not found / not owner
+  if (!tweet) {
+    throw new ApiError(404, "Tweet not found or access denied");
+  }
+
+  // 5️⃣ Success response
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Tweet deleted successfully"));
+});
+
+const pinTweetToggle = asyncHandler(async (req, res) => {
+  if (!req.user?._id) {
+    throw new ApiError(401, "Unauthorized request");
+  }
+
+  const { tweetId } = req.params;
+
+  // 2️⃣ Validate tweetId
+  if (!mongoose.Types.ObjectId.isValid(tweetId)) {
+    throw new ApiError(400, "Invalid tweet id");
+  }
+
+  const tweet = await Tweet.exists({
+    _id: tweetId,
+    owner: req.user._id,
+  });
+
+  if (!tweet) {
+    throw new ApiError(404, "Tweet not found or access denied");
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.user._id,
+    [
+      {
+        $set: {
+          pinnedTweetId: {
+            $cond: [
+              { $eq: ["$pinnedTweetId",new mongoose.Types.ObjectId(tweetId)] },
+              null, // unpin
+              new mongoose.Types.ObjectId(tweetId), // pin
+            ],
+          },
+        },
+      },
+    ],
+    { new: true,  updatePipeline: true, }
+  ).select("pinnedTweetId");
+
+  const isPinned = String(user.pinnedTweetId) === tweetId;
+
+  return res
+  .status(200)
+  .json(
+    new ApiResponse(200, {isPinned}, isPinned ? "Tweet successfully pinned" : "Tweet successfully unpinned")
+  )
 
 })
+
+
+export { createTweet, updateTweet, deleteTweet, pinTweetToggle, getTweetById, getTrendingTweets, getHomeTweets, getUserTweets };

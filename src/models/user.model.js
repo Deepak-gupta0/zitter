@@ -63,9 +63,14 @@ const userSchema = new mongoose.Schema(
       type: String,
     },
     isActive: {
-      type: String,
+      type: Boolean,
       default: true,
-    }
+    },
+    pinnedTweetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Tweet",
+      default: null,
+    },
   },
   { timestamps: true }
 );
@@ -80,7 +85,7 @@ userSchema.methods.isPasswordValid = async function (userPassword) {
   return await bcrypt.compare(userPassword, this.password);
 };
 
-userSchema.methods.generateAccessToken = async function () {
+userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
     {
       _id: this._id,
@@ -93,7 +98,7 @@ userSchema.methods.generateAccessToken = async function () {
   );
 };
 
-userSchema.methods.generateRefreshToken = async function () {
+userSchema.methods.generateRefreshToken = function () {
   return jwt.sign(
     {
       _id: this._id,
@@ -105,7 +110,5 @@ userSchema.methods.generateRefreshToken = async function () {
     { expiresIn: process.env.REFRESH_TOKEN_EXPIRY }
   );
 };
-
-
 
 export const User = mongoose.model("User", userSchema);

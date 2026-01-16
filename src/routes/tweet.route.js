@@ -1,10 +1,14 @@
 import { Router } from "express";
+import { upload } from "../middlewares/multer.middleware.js";
+import { verifyJwt } from "../middlewares/auth.middleware.js";
+import { checkIsActive } from "../middlewares/isActive.middleware.js";
+import { createTweet, updateTweet, deleteTweet, pinTweetToggle, getTweetById, getUserTweets, getTrendingTweets, getHomeTweets } from "../controllers/tweet.controller.js";
 
 const router = Router();
 
 // 🌍 PUBLIC / MIXED
 router.get("/user/:userId", getUserTweets);
-router.get("/home");
+router.get("/home", getHomeTweets);
 router.get("/trending", getTrendingTweets);
 router.get("/:tweetId", getTweetById);
 
@@ -13,15 +17,11 @@ router.use(verifyJwt, checkIsActive);
 
 router.post(
   "/",
-  upload.fields([
-    { name: "img", maxCount: 4 },
-    { name: "video", maxCount: 4 },
-    {name: "gif", maxCount: 4}
-  ]),
+  upload.array("media", 5),
   createTweet
 );
 router.patch("/:tweetId", updateTweet);
 router.delete("/:tweetId", deleteTweet);
-router.patch("/:tweetId/pin", pinTweet);
+router.patch("/:tweetId/pin", pinTweetToggle);
 
 export default router;

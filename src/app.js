@@ -11,7 +11,7 @@ app.use(
 );
 
 import userRoute from "./routes/user.route.js"
-import tweetRoute from "./routes/user.route.js"
+import tweetRoute from "./routes/tweet.route.js"
 import cookieParser from "cookie-parser";
 
 app.use(express.json({limit: "16kb"}))

@@ -1,20 +1,26 @@
 import mongoose from "mongoose";
 import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
-
-const mediaSchema = new mongoose.Schema({
-  type: {
-    type: String,
-    enum: ["image", "video", "gif"],
-    required: true,
+const mediaSchema = new mongoose.Schema(
+  {
+    type: {
+      type: String,
+      enum: ["image", "video", "gif"],
+      required: true,
+    },
+    url: {
+      type: String,
+      required: true,
+    },
+    publicId: {
+      type: String,
+      required: true,
+    },
+    width: Number,
+    height: Number,
+    duration: Number,
   },
-  url: {
-    type: String,
-    required: true,
-  },
-  width: Number,
-  height: Number,
-  duration: Number,
-}, {_id : false});
+  { _id: false }
+);
 
 const tweetSchema = new mongoose.Schema(
   {
@@ -58,8 +64,8 @@ const tweetSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-postSchema.index({ "owner": 1, "createdAt": -1 })
+tweetSchema.index({ "owner": 1, "createdAt": -1 })
 
-postSchema.plugin(mongooseAggregatePaginate);
+tweetSchema.plugin(mongooseAggregatePaginate);
 
 export const Tweet = mongoose.model("Tweet", tweetSchema);
