@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
+
 const mediaSchema = new mongoose.Schema(
   {
     type: {

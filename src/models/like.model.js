@@ -11,7 +11,7 @@ const likeSchema = new mongoose.Schema(
     targetType: {
       type: String,
       required: true,
-     enum: ["Tweet", "Comment"],
+      enum: ["Tweet", "Comment"],
     },
     likedBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -26,6 +26,7 @@ likeSchema.index(
   { targetId: 1, targetType: 1, likedBy: 1 },
   { unique: true }
 );
+
 likeSchema.index({ likedBy: 1, createdAt: -1 });
 likeSchema.index({ targetType: 1, targetId: 1 });
 mon
