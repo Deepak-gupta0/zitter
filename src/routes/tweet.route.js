@@ -2,7 +2,7 @@ import { Router } from "express";
 import { upload } from "../middlewares/multer.middleware.js";
 import { verifyJwt } from "../middlewares/auth.middleware.js";
 import { checkIsActive } from "../middlewares/isActive.middleware.js";
-import { createTweet, updateTweet, deleteTweet, pinTweetToggle, getTweetById, getUserTweets, getTrendingTweets, getHomeTweets } from "../controllers/tweet.controller.js";
+import { createTweet, updateTweet, deleteTweet, pinTweetToggle, getTweetById, getUserTweets, getTrendingTweets, getHomeTweets, searchTweets} from "../controllers/tweet.controller.js";
 
 const router = Router();
 
@@ -11,6 +11,7 @@ router.get("/user/:userId", getUserTweets);
 router.get("/home", getHomeTweets);
 router.get("/trending", getTrendingTweets);
 router.get("/:tweetId", getTweetById);
+router.get("/search", searchTweets);
 
 // 🔐 PROTECTED (Login + Active required)
 router.use(verifyJwt, checkIsActive);

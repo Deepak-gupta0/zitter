@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { Tweet } from "../models/tweet.model.js";
-// import { Subscription } from "../models/subscription.model.js";
 import { uploadOnCloudinary } from "../utils/Cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
@@ -41,7 +40,7 @@ const getUserTweets = asyncHandler(async (req, res) => {
         ],
       },
     },
-    {$unwind : "$owner"},
+    { $unwind: "$owner" },
     {
       $lookup: {
         from: "comments",
@@ -82,10 +81,8 @@ const getUserTweets = asyncHandler(async (req, res) => {
   ]);
 
   return res
-  .status(200)
-  .json(
-    new ApiResponse(200, tweets, "Users tweets fetched successfully.")
-  )
+    .status(200)
+    .json(new ApiResponse(200, tweets, "Users tweets fetched successfully."));
 });
 
 const getHomeTweets = asyncHandler(async (req, res) => {
@@ -178,10 +175,10 @@ const getTrendingTweets = asyncHandler(async (req, res) => {
       $addFields: {
         trendingScore: {
           $add: [
-            { $multiply: [ "$likesCount", 3 ] },
-            { $multiply: [ "$repostCount", 4 ] },
-            { $multiply: [ "$replyCount", 2 ] },
-            { $multiply: ["$viewCount", 0.1 ] },
+            { $multiply: ["$likesCount", 3] },
+            { $multiply: ["$repostCount", 4] },
+            { $multiply: ["$replyCount", 2] },
+            { $multiply: ["$viewCount", 0.1] },
           ],
         },
       },
@@ -290,6 +287,83 @@ const getTweetById = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, tweet[0], "Tweet found successfully"));
+});
+
+const searchTweets = asyncHandler(async (req, res) => {
+  const { q, cursor } = req.query;
+
+  if (!q || !q.trim()) {
+    throw new ApiError(400, "search query is required.");
+  }
+
+  if (cursor) {
+    match.createdAt = { $lt: new Date(cursor) };
+  }
+
+  const match = {
+    isPublished: true,
+    isDeleted: false,
+    content: { $regex: q.trim(), $options: "i" },
+  };
+
+  const tweets = await Tweet.aggregate([
+    {
+      $match: match,
+    },
+    {
+      $sort: { createdAt: -1 },
+    },
+    {
+      $limit: limit + 1,
+    },
+    {
+      $lookup: {
+        from: "users",
+        foreignField: "_id",
+        localField: "owner",
+        as: "owner",
+        pipeline: [
+          {
+            $match: {
+              isActive: true,
+            },
+          },
+          {
+            $project: {
+              username: 1,
+              fullName: 1,
+              avatar: 1,
+              _id: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: "$owner",
+    },
+  ]);
+
+  const hasMore = tweet.length > limit;
+  if (hasMore) tweets.pop();
+
+  const nextCursor =
+    tweets.length > 0 ? tweets[tweets.length - 1].createdAt : null;
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        tweets,
+        pagination: {
+          limit,
+          hasMore,
+          nextCursor,
+        },
+      },
+      "Tweets searched successfully"
+    )
+  );
 });
 
 //PROTECTED CONTROLLERS
@@ -436,7 +510,7 @@ const pinTweetToggle = asyncHandler(async (req, res) => {
         $set: {
           pinnedTweetId: {
             $cond: [
-              { $eq: ["$pinnedTweetId",new mongoose.Types.ObjectId(tweetId)] },
+              { $eq: ["$pinnedTweetId", new mongoose.Types.ObjectId(tweetId)] },
               null, // unpin
               new mongoose.Types.ObjectId(tweetId), // pin
             ],
@@ -444,18 +518,30 @@ const pinTweetToggle = asyncHandler(async (req, res) => {
         },
       },
     ],
-    { new: true,  updatePipeline: true, }
+    { new: true, updatePipeline: true }
   ).select("pinnedTweetId");
 
   const isPinned = String(user.pinnedTweetId) === tweetId;
 
   return res
-  .status(200)
-  .json(
-    new ApiResponse(200, {isPinned}, isPinned ? "Tweet successfully pinned" : "Tweet successfully unpinned")
-  )
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        { isPinned },
+        isPinned ? "Tweet successfully pinned" : "Tweet successfully unpinned"
+      )
+    );
+});
 
-})
-
-
-export { createTweet, updateTweet, deleteTweet, pinTweetToggle, getTweetById, getTrendingTweets, getHomeTweets, getUserTweets };
+export {
+  createTweet,
+  updateTweet,
+  deleteTweet,
+  pinTweetToggle,
+  getTweetById,
+  getTrendingTweets,
+  getHomeTweets,
+  getUserTweets,
+  searchTweets
+};
