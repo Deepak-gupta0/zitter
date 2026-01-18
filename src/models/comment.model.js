@@ -13,9 +13,9 @@ const commentSchema = new mongoose.Schema({
     ref: "User",
     required: true,
   },
-  post: {
+  tweet: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Post",
+    ref: "Tweet",
     required: true,
   },
 
@@ -32,6 +32,10 @@ const commentSchema = new mongoose.Schema({
     default: 0
   },
   isDeleted: {
+    type: Boolean,
+    default: false
+  },
+  isEdited: {
     type: Boolean,
     default: false
   }
