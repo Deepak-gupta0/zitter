@@ -11,14 +11,14 @@ const getTweetComments = asyncHandler(async (req, res) => {
   const limit = 15;
 
   if (!tweetId) {
-    return res.status(400).json({ message: "Tweet ID is required." });
+    throw new ApiError(400, "Tweet id is required.");
   }
 
   // Query: same tweet, not deleted, top-level comments (parentComment null)
-  let query = { 
-    tweet: tweetId, 
-    parentComment: null, 
-    isDeleted: false 
+  let query = {
+    tweet: tweetId,
+    parentComment: null,
+    isDeleted: false,
   };
 
   if (cursor) {
@@ -30,13 +30,20 @@ const getTweetComments = asyncHandler(async (req, res) => {
     .limit(limit)
     .populate("owner", "username avatar fullName"); // populate owner info
 
-  const nextCursor = comments.length > 0 ? comments[comments.length - 1].createdAt : null;
+  const nextCursor =
+    comments.length > 0 ? comments[comments.length - 1].createdAt : null;
 
-  res.status(200).json({
-    comments,
-    nextCursor,
-    hasMore: comments.length === limit,
-  });
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        comments,
+        nextCursor,
+        hasMore: comments.length === limit,
+      },
+      "Tweets fetched successfully."
+    )
+  );
 });
 
 const createComment = asyncHandler(async (req, res) => {
@@ -134,8 +141,8 @@ const deleteComment = asyncHandler(async (req, res) => {
     { new: true }
   );
 
-  if(!comment){
-    throw new ApiError(404, "Comment doesnot exists")
+  if (!comment) {
+    throw new ApiError(404, "Comment doesnot exists");
   }
 
   const tweetUpdate = await Tweet.updateOne(
@@ -155,10 +162,158 @@ const deleteComment = asyncHandler(async (req, res) => {
   }
 
   return res
-  .status(200)
-  .json(
-    new ApiResponse(200, {delete: true}, "Comment deleted successfully.")
-  )
+    .status(200)
+    .json(
+      new ApiResponse(200, { delete: true }, "Comment deleted successfully.")
+    );
 });
 
-export { getTweetComments, createComment, updateComment, deleteComment };
+const createReplyOnComment = asyncHandler(async (req, res) => {
+  if (!req.user?._id) {
+    throw new ApiError(401, "Unauthorized request.");
+  }
+
+  const { commentId } = req.params;
+  const { content } = req.body;
+
+  if (!mongoose.Types.ObjectId.isValid(commentId)) {
+    throw new ApiError(400, "comment id is invalid");
+  }
+
+  if (!content || !content.trim()) {
+    throw new ApiError(400, "content is required.");
+  }
+
+  const parentComment = await Comment.findOne({ _id: commentId });
+
+  if (!parentComment || parentComment.isDeleted) {
+    throw new ApiError(404, "Parent comment not found");
+  }
+
+  const reply = await Comment.create({
+    owner: req.user._id,
+    content: content.trim(),
+    tweet: parentComment.tweet,
+    parentComment: parentComment._id,
+  });
+
+  await Comment.findByIdAndUpdate(parentComment._id, {
+    $inc: { replyCount: 1 },
+  });
+
+  return res
+    .status(201)
+    .json(new ApiResponse(201, reply, "Reply added successfully."));
+});
+
+const getCommentReplies = asyncHandler(async (req, res) => {
+  const { commentId } = req.params;
+  const { cursor } = req.query;
+  const limit = 7;
+
+  if (!commentId) {
+    throw new ApiError(400, "Comment id is required.");
+  }
+
+  const parentComment = await Comment.findById(commentId);
+
+  if (!parentComment || parentComment.isDeleted) {
+    throw new ApiError(404, "Parent comment not found");
+  }
+
+  if (cursor && isNaN(new Date(cursor).getTime())) {
+    throw new ApiError(400, "Invalid cursor");
+  }
+
+  let query = {
+    parentComment: commentId,
+    isDeleted: false,
+  };
+
+  if (cursor) {
+    query.createdAt = { $lt: new Date(cursor) };
+  }
+
+  const comments = await Comment.find(query)
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .populate("owner", "username avatar fullName");
+
+  const nextCursor =
+    comments.length > 0 ? comments[comments.length - 1].createdAt : null;
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        comments,
+        nextCursor,
+        hasMore: comments.length === limit,
+      },
+      "Comment replies fetched successfully."
+    )
+  );
+});
+
+const getComment = asyncHandler(async (req, res) => {
+  const { commentId } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(commentId)) {
+    throw new ApiError(400, "comment id is invalid");
+  }
+
+  const comment = await Comment.aggregate([
+    {
+      $match: {
+        isDeleted: false,
+        _id: new mongoose.Types.ObjectId(commentId),
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        foreignField: "_id",
+        localField: "owner",
+        as: "owner",
+        pipeline: [
+          {
+            $match: {
+              isActive: true,
+            },
+          },
+          {
+            $project: {
+              avatar: 1,
+              fullName: 1,
+              username: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: {
+        path: "$owner",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+  ]);
+
+  if (!comment.length) {
+    throw new ApiError(404, "Comment not found");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, comment[0], "Comment get successfully."));
+});
+
+export {
+  getTweetComments,
+  createComment,
+  updateComment,
+  deleteComment,
+  createReplyOnComment,
+  getCommentReplies,
+  getComment,
+};
