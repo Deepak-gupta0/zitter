@@ -3,7 +3,7 @@ import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 
 const repostSchema = new mongoose.Schema(
   {
-    post: {
+    tweet: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Post",
       required: true,
@@ -19,7 +19,7 @@ const repostSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-repostSchema.index({post : 1, user: 1}, {unique: true})
+repostSchema.index({tweet : 1, user: 1}, {unique: true})
 
 repostSchema.plugin(mongooseAggregatePaginate)
 

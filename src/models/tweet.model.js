@@ -50,6 +50,7 @@ const tweetSchema = new mongoose.Schema(
 
     replyCount: { type: Number, default: 0, min: 0 },
     repostCount: { type: Number, default: 0, min: 0 },
+    quoteCount: { type: Number, default: 0, min: 0 },
     likesCount: { type: Number, default: 0, min: 0 },
     viewCount: { type: Number, default: 0, min: 0 },
 
@@ -65,7 +66,7 @@ const tweetSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-tweetSchema.index({ "owner": 1, "createdAt": -1 })
+tweetSchema.index({ owner: 1, createdAt: -1 })
 
 tweetSchema.plugin(mongooseAggregatePaginate);
 
