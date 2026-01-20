@@ -11,7 +11,7 @@ router.get("/user/:userId", getUserTweets);
 router.get("/home", getHomeTweets);
 router.get("/trending", getTrendingTweets);
 router.get("/:tweetId", getTweetById);
-router.get("/search", searchTweets);
+router.post("/search", searchTweets);
 
 // 🔐 PROTECTED (Login + Active required)
 router.use(verifyJwt, checkIsActive);

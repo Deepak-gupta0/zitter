@@ -291,7 +291,7 @@ const getTweetById = asyncHandler(async (req, res) => {
 
 const searchTweets = asyncHandler(async (req, res) => {
   const { q, cursor } = req.query;
-
+  const limit = 7;
   if (!q || !q.trim()) {
     throw new ApiError(400, "search query is required.");
   }
@@ -344,7 +344,7 @@ const searchTweets = asyncHandler(async (req, res) => {
     },
   ]);
 
-  const hasMore = tweet.length > limit;
+  const hasMore = tweets.length > limit;
   if (hasMore) tweets.pop();
 
   const nextCursor =
@@ -404,7 +404,8 @@ const createTweet = asyncHandler(async (req, res) => {
   const tweet = await Tweet.create({
     owner: req.user._id,
     media: media.length ? media : undefined,
-    content,
+    type: "TWEET",
+    content: content.trim(),
   });
 
   return res

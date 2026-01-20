@@ -115,6 +115,12 @@ const commentLike = asyncHandler(async (req, res) => {
     throw new ApiError(400, "comment id is invalid");
   }
 
+  const comment = await Comment.findOne({_id: commentId, isDeleted: false})
+
+  if(!comment){
+    throw new ApiError(404, "Comment not found")
+  }
+
   const like = await Like.findOneAndUpdate(
     {
       likedBy: req.user._id,
@@ -163,6 +169,12 @@ const commentUnlike = asyncHandler(async (req, res) => {
 
   if (!mongoose.Types.ObjectId.isValid(commentId)) {
     throw new ApiError(400, "comment id is invalid");
+  }
+
+  const comment = await Comment.findOne({_id: commentId, isDeleted: false})
+
+  if(!comment){
+    throw new ApiError(404, "Comment not found")
   }
 
   const unlike = await Like.findOneAndDelete({

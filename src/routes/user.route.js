@@ -15,6 +15,7 @@ import {
   updateCoverImage,
   deleteAccount,
 } from "../controllers/user.controller.js";
+import { upload } from "../middlewares/multer.middleware.js";
 
 const router = Router();
 
@@ -32,8 +33,8 @@ router.post("/logout", logoutUser);
 router.get("/me", getCurrentUser);
 router.patch("/profile", updateAccountDetails);
 router.patch("/password", changePassword);
-router.patch("/avatar", updateAvatar);
-router.patch("/cover-image", updateCoverImage);
+router.patch("/avatar", upload.single("avatar"), updateAvatar);
+router.patch("/cover-image", upload.single("coverImage"), updateCoverImage);
 router.delete("/account", deleteAccount);
 
 export default router;

@@ -53,6 +53,10 @@ const generateAccessTokenAndRefeshToken = async (id) => {
     const refreshToken = user.generateRefreshToken();
 
     user.refreshToken = refreshToken;
+
+    if (!user.isActive) {
+      user.isActive = true;
+    }
     await user.save({ validateBeforeSave: false });
 
     return { accessToken, refreshToken };
@@ -79,10 +83,6 @@ const loginUser = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Invalid credentials");
   }
 
-  if (!user.isActive) {
-    throw new ApiError(403, "Account is deactivated");
-  }
-
   const isPasswordCorrect = await user.isPasswordValid(password);
 
   if (!isPasswordCorrect) {
@@ -97,6 +97,7 @@ const loginUser = asyncHandler(async (req, res) => {
 
   delete safeUser.password;
   delete safeUser.refreshToken;
+  delete safeUser.isActive;
 
   return res
     .status(200)
@@ -129,9 +130,9 @@ const logoutUser = asyncHandler(async (req, res) => {
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
   const incomingRefreshToken = req.cookies?.refreshToken;
-
+  console.log(incomingRefreshToken);
   if (!incomingRefreshToken) {
-    throw new ApiError(401, "Unauthorized request");
+    throw new ApiError(401, "Unauthorized cookie");
   }
 
   try {
@@ -464,7 +465,7 @@ const deleteAccount = asyncHandler(async (req, res) => {
     .status(200)
     .clearCookie("accessToken")
     .clearCookie("refreshToken")
-    .json(new ApiResponse(200, {}, "Account delated successfully."));
+    .json(new ApiResponse(200, {}, "Account deleted successfully."));
 });
 
 export {

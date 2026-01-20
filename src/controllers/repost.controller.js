@@ -55,7 +55,7 @@ const deleteRepost = asyncHandler(async (req, res) => {
 
   const repost = await Repost.findOneAndDelete({
     user: req.user._id,
-    post: tweetId,
+    tweet: tweetId,
   });
 
   if (!repost) {
@@ -208,7 +208,6 @@ const getRepostStatus = asyncHandler(async (req, res) => {
   );
 });
 
-
 const getRepostQuotes = asyncHandler(async (req, res) => {
   const { tweetId } = req.params;
   const { cursor } = req.query;
@@ -284,4 +283,11 @@ const getRepostQuotes = asyncHandler(async (req, res) => {
   );
 });
 
-export { createRepost, createRepostQuote, deleteRepost, getRepostsOfTweet, getRepostStatus, getRepostQuotes };
+export {
+  createRepost,
+  createRepostQuote,
+  deleteRepost,
+  getRepostsOfTweet,
+  getRepostStatus,
+  getRepostQuotes,
+};

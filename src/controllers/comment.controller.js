@@ -142,31 +142,29 @@ const deleteComment = asyncHandler(async (req, res) => {
   );
 
   if (!comment) {
-    throw new ApiError(404, "Comment doesnot exists");
+    throw new ApiError(404, "Comment does not exist");
   }
 
-  const tweetUpdate = await Tweet.updateOne(
-    {
-      _id: comment.tweet,
-      isDeleted: false,
-      replyCount: { $gt: 0 },
-    },
-    {
-      $inc: { replyCount: -1 },
-    }
-  );
-
-  // Optional safety log (no throw to avoid breaking UX)
-  if (tweetUpdate.matchedCount === 0) {
-    console.warn("Reply count not updated for tweet:", comment.tweet);
-  }
-
-  return res
-    .status(200)
-    .json(
-      new ApiResponse(200, { delete: true }, "Comment deleted successfully.")
+    const tweetUpdate = await Tweet.updateOne(
+      {
+        _id: comment.tweet,
+        isDeleted: false,
+        replyCount: { $gt: 0 },
+      },
+      {
+        $inc: { replyCount: -1 },
+      }
     );
+
+    if (tweetUpdate.matchedCount === 0) {
+      console.warn("Reply count not updated for tweet:", comment.tweet);
+    }
+
+  return res.status(200).json(
+    new ApiResponse(200, { deleted: true }, "Comment deleted successfully")
+  );
 });
+
 
 const createReplyOnComment = asyncHandler(async (req, res) => {
   if (!req.user?._id) {
@@ -184,7 +182,7 @@ const createReplyOnComment = asyncHandler(async (req, res) => {
     throw new ApiError(400, "content is required.");
   }
 
-  const parentComment = await Comment.findOne({ _id: commentId });
+  const parentComment = await Comment.findOne({ _id: commentId, isDeleted: false });
 
   if (!parentComment || parentComment.isDeleted) {
     throw new ApiError(404, "Parent comment not found");

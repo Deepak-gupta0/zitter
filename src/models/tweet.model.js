@@ -63,6 +63,10 @@ const tweetSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
+    type: {
+      type: String,
+      enum: ["QUOTE", "TWEET"],
+    }
   },
   { timestamps: true }
 );
