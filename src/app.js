@@ -15,6 +15,7 @@ import tweetRoute from "./routes/tweet.route.js"
 import likeRoute from "./routes/like.route.js"
 import repostRoute from "./routes/repost.route.js"
 import commentRoute from "./routes/comment.route.js"
+import subscriptionRouter from "./routes/subscription.route.js"
 import cookieParser from "cookie-parser";
 
 app.use(express.json({limit: "16kb"}))
@@ -27,5 +28,6 @@ app.use("/api/v1/tweets", tweetRoute)
 app.use("/api/v1/likes", likeRoute)
 app.use("/api/v1/comments", commentRoute)
 app.use("/api/v1/reposts", repostRoute)
+app.use("/api/v1/subs", subscriptionRouter)
 
 export default app;

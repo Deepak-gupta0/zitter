@@ -26,6 +26,9 @@ subscriptionSchema.pre(function (next) {
   return next();
 })
 
+subscriptionSchema.index({ channel: 1, _id: -1 });
+subscriptionSchema.index({ follower: 1, _id: -1 });
+
 subscriptionSchema.plugin(mongooseAggregatePaginate)
 
 export const Subscription = mongoose.model("Subscription", subscriptionSchema)
