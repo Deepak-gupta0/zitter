@@ -83,7 +83,7 @@ const getUserTweets = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, tweets, "Users tweets fetched successfully."));
-});
+});//need to be fixed 
 
 const getHomeTweets = asyncHandler(async (req, res) => {
   const limit = Number(req.query.limit) || 20;

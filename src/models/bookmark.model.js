@@ -3,9 +3,9 @@ import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 
 const bookmarkSchema = new mongoose.Schema(
   {
-    post: {
+    tweet: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Post",
+      ref: "Tweet",
       required: true,
       index: true,
     },
