@@ -1,7 +1,10 @@
 import mongoose from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { getMentionedUsers } from "../utils/UtilityFunctions.js";
+import {
+  extractHashtags,
+  getMentionedUsers,
+} from "../utils/UtilityFunctions.js";
 import { Tweet } from "../models/tweet.model.js";
 import { uploadOnCloudinary } from "../utils/Cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -10,110 +13,80 @@ import { Mention } from "../models/mention.model.js";
 import { Like } from "../models/like.model.js";
 import { Bookmark } from "../models/bookmark.model.js";
 import { Comment } from "../models/comment.model.js";
+import { Hashtag } from "../models/hashtag.model.js";
+import { HashtagTweet } from "../models/hashtagTweet.model.js";
 
 //PUBLIC CONTROLLERS
 const getUserTweets = asyncHandler(async (req, res) => {
   const { userId } = req.params;
-  const { cursor, limit = 10 } = req.query;
+  const limit = Number(req.query.limit) || 10;
+  const { cursor } = req.query;
 
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     throw new ApiError(400, "userId is not valid");
   }
 
-  const matchStage = {
-    owner: new mongoose.Types.ObjectId(userId),
-    isPublished: true,
-    isDeleted: false,
-  };
+  const cursorDate = cursor ? new Date(cursor) : null;
 
-  // 👇 cursor logic
-  if (cursor) {
-    if (!mongoose.Types.ObjectId.isValid(cursor)) {
-      throw new ApiError(400, "cursor is not valid");
-    }
-
-    matchStage._id = {
-      $lt: new mongoose.Types.ObjectId(cursor),
-    };
-  }
-
+  // 1️⃣ Original tweets
   const tweets = await Tweet.aggregate([
-    { $match: matchStage },
-
-    // newest first
-    { $sort: { _id: -1 } },
-
-    // fetch one extra to detect next cursor
-    { $limit: Number(limit) + 1 },
-
     {
-      $lookup: {
-        from: "users",
-        localField: "owner",
-        foreignField: "_id",
-        as: "owner",
-        pipeline: [
-          {
-            $project: {
-              username: 1,
-              fullName: 1,
-              avatar: 1,
-            },
-          },
-        ],
-      },
-    },
-    { $unwind: "$owner" },
-
-    {
-      $lookup: {
-        from: "comments",
-        localField: "_id",
-        foreignField: "post",
-        as: "reply",
+      $match: {
+        owner: new mongoose.Types.ObjectId(userId),
+        isPublished: true,
+        isDeleted: false,
+        ...(cursorDate && { createdAt: { $lt: cursorDate } }),
       },
     },
     {
-      $lookup: {
-        from: "reposts",
-        localField: "_id",
-        foreignField: "post",
-        as: "repost",
-      },
-    },
-    {
-      $lookup: {
-        from: "likes",
-        localField: "_id",
-        foreignField: "targetId",
-        as: "likes",
-      },
-    },
-    {
-      $addFields: {
-        replyCount: { $size: "$reply" },
-        repostCount: { $size: "$repost" },
-        likesCount: { $size: "$likes" },
+      $project: {
+        tweetId: "$_id",
+        type: { $literal: "TWEET" },
+        createdAt: 1,
       },
     },
   ]);
 
-  // 👇 pagination handling
-  let nextCursor = null;
-  if (tweets.length > limit) {
-    const lastTweet = tweets.pop(); // extra one remove
-    nextCursor = lastTweet._id;
-  }
+  // 2️⃣ Reposts
+  const reposts = await Repost.aggregate([
+    {
+      $match: {
+        user: new mongoose.Types.ObjectId(userId),
+        ...(cursorDate && { createdAt: { $lt: cursorDate } }),
+      },
+    },
+    {
+      $project: {
+        tweetId: "$post",
+        type: { $literal: "REPOST" },
+        createdAt: 1,
+      },
+    },
+  ]);
+
+  // 3️⃣ Merge + sort
+  let feed = [...tweets, ...reposts]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, limit + 1);
+
+  // 4️⃣ Pagination handling
+  const hasMore = feed.length > limit;
+  if (hasMore) feed.pop();
+
+  const nextCursor = feed.length > 0 ? feed[feed.length - 1].createdAt : null;
 
   return res.status(200).json(
     new ApiResponse(
       200,
       {
-        tweets,
-        nextCursor,
-        hasMore: Boolean(nextCursor),
+        feed,
+        pagination: {
+          limit,
+          hasMore,
+          nextCursor,
+        },
       },
-      "User tweets fetched successfully."
+      "User feed fetched successfully"
     )
   );
 });
@@ -183,8 +156,11 @@ const getHomeTweets = asyncHandler(async (req, res) => {
       200,
       {
         tweets,
-        hasMore,
-        nextCursor,
+        pagination: {
+          limit,
+          hasMore,
+          nextCursor,
+        },
       },
       "Home feed fetched successfully"
     )
@@ -193,17 +169,20 @@ const getHomeTweets = asyncHandler(async (req, res) => {
 
 const getTrendingTweets = asyncHandler(async (req, res) => {
   const limit = Number(req.query.limit) || 20;
+  const { cursor } = req.query;
 
-  const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 100);
+  const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const matchStage = {
+    isPublished: true,
+    isDeleted: false,
+    createdAt: { $gte: last24Hours },
+  };
 
   const tweets = await Tweet.aggregate([
-    {
-      $match: {
-        isPublished: true,
-        isDeleted: false,
-        createdAt: { $gte: last24Hours },
-      },
-    },
+    { $match: matchStage },
+
+    // 1️⃣ calculate score
     {
       $addFields: {
         trendingScore: {
@@ -216,49 +195,84 @@ const getTrendingTweets = asyncHandler(async (req, res) => {
         },
       },
     },
+
+    // 2️⃣ cursor filter
+    ...(cursor
+      ? [
+          {
+            $match: {
+              $or: [
+                { trendingScore: { $lt: Number(cursor.score) } },
+                {
+                  trendingScore: Number(cursor.score),
+                  createdAt: { $lt: new Date(cursor.createdAt) },
+                },
+              ],
+            },
+          },
+        ]
+      : []),
+
+    // 3️⃣ sort
     {
       $sort: {
         trendingScore: -1,
+        createdAt: -1,
       },
     },
+
+    // 4️⃣ pagination
     {
-      $limit: limit,
+      $limit: limit + 1,
     },
+
+    // 5️⃣ owner lookup
     {
       $lookup: {
         from: "users",
-        foreignField: "_id",
         localField: "owner",
+        foreignField: "_id",
         as: "owner",
         pipeline: [
-          {
-            $match: { isActive: true },
-          },
+          { $match: { isActive: true } },
           {
             $project: {
               username: 1,
               fullName: 1,
               avatar: 1,
-              _id: 1,
             },
           },
         ],
       },
     },
-    {
-      $unwind: "$owner",
-    },
+    { $unwind: "$owner" },
   ]);
 
-  if (!tweets.length) {
-    throw new ApiError(404, "No trending-tweets are found");
-  }
+  const hasMore = tweets.length > limit;
+  if (hasMore) tweets.pop();
 
-  return res
-    .status(200)
-    .json(
-      new ApiResponse(200, tweets, "Trending tweets are successfully found")
-    );
+  const nextCursor =
+    tweets.length > 0
+      ? {
+          score: tweets[tweets.length - 1].trendingScore,
+          createdAt: tweets[tweets.length - 1].createdAt,
+        }
+      : null;
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        tweets,
+        pagination: {
+          limit,
+          hasMore,
+          nextCursor,
+        },
+      },
+      "Trending tweets fetched successfully"
+    )
+  );
 });
 
 const getTweetById = asyncHandler(async (req, res) => {
@@ -324,7 +338,7 @@ const getTweetById = asyncHandler(async (req, res) => {
 
 const searchTweets = asyncHandler(async (req, res) => {
   const { q, cursor } = req.query;
-  const limit = 7;
+  const limit = Number(req.query.limit) || 7;
   if (!q || !q.trim()) {
     throw new ApiError(400, "search query is required.");
   }
@@ -416,27 +430,26 @@ const createTweet = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Maximum 5 media files allowed");
   }
 
-  // const media = [];
+  // 🔹 upload media
+  const media = await Promise.all(
+    files.map(async (file) => {
+      const result = await uploadOnCloudinary(file.path, "tweets");
 
- const media = await Promise.all(
-  files.map(async (file) => {
-    const result = await uploadOnCloudinary(file.path, "tweets");
+      const isVideo = file.mimetype.startsWith("video");
+      const isGif = file.mimetype === "image/gif";
 
-    const isVideo = file.mimetype.startsWith("video");
-    const isGif = file.mimetype === "image/gif";
+      return {
+        type: isVideo ? "video" : isGif ? "gif" : "image",
+        url: result.secure_url,
+        publicId: result.public_id,
+        height: result.height,
+        width: result.width,
+        duration: result.duration,
+      };
+    })
+  );
 
-    return {
-      type: isVideo ? "video" : isGif ? "gif" : "image",
-      url: result.secure_url,
-      publicId: result.public_id,
-      height: result.height,
-      width: result.width,
-      duration: result.duration,
-    };
-  })
-);
-
-
+  // 🔹 mentions
   const mentionedUsers = getMentionedUsers(content);
   const usernames = mentionedUsers.map((u) => u.username);
 
@@ -445,24 +458,52 @@ const createTweet = asyncHandler(async (req, res) => {
     isActive: true,
   }).select("_id username");
 
+  // 🔹 create tweet
   const tweet = await Tweet.create({
     owner: req.user._id,
     media: media.length ? media : undefined,
     type: "TWEET",
-    content: content.trim(),
+    content,
   });
 
- if (mentionedUserDocs.length) {
-  const mentionPayload = mentionedUserDocs.map(user => ({
-    tweet: tweet._id,
-    mentionedUser: user._id,
-    mentionedBy: req.user._id,
-    isRead: false,
-  }));
+  // 🔹 save mentions
+  if (mentionedUserDocs.length) {
+    const mentionPayload = mentionedUserDocs.map((user) => ({
+      tweet: tweet._id,
+      mentionedUser: user._id,
+      mentionedBy: req.user._id,
+      isRead: false,
+    }));
 
-  await Mention.insertMany(mentionPayload);
-}
+    await Mention.insertMany(mentionPayload);
+  }
 
+  // ===============================
+  // 🔥 HASHTAG LOGIC (NEW)
+  // ===============================
+
+  const hashtags = extractHashtags(content);
+
+  if (hashtags.length) {
+    const hashtagDocs = await Promise.all(
+      hashtags.map(async (tag) => {
+        return Hashtag.findOneAndUpdate(
+          { name: tag },
+          { $setOnInsert: { name: tag } },
+          { upsert: true, new: true }
+        );
+      })
+    );
+
+    const hashtagTweetPayload = hashtagDocs.map((hashtag) => ({
+      hashtag: hashtag._id,
+      tweet: tweet._id,
+    }));
+
+    await HashtagTweet.insertMany(hashtagTweetPayload);
+  }
+
+  // ===============================
 
   return res
     .status(201)
@@ -537,10 +578,7 @@ const deleteTweet = asyncHandler(async (req, res) => {
     Mention.deleteMany({ tweet: tweet._id }),
     Like.deleteMany({ tweet: tweet._id }),
     Bookmark.deleteMany({ tweet: tweet._id }),
-    Comment.updateMany(
-      { tweet: tweet._id },
-      { $set: { isDeleted: true } }
-    ),
+    Comment.updateMany({ tweet: tweet._id }, { $set: { isDeleted: true } }),
   ]);
 
   tweet.isDeleted = true;

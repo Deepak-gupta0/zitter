@@ -13,5 +13,9 @@ const getMentionedUserNames = (content) => {
   return [...new Set(mentions)];
 };
 
+const extractHashtags = (text = "") => {
+  const matches = text.match(/#[\w]+/g) || [];
+  return [...new Set(matches.map(tag => tag.slice(1).toLowerCase()))];
+};
 
-export {getMentionedUserNames}
+export {getMentionedUserNames, extractHashtags}

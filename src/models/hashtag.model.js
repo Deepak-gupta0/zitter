@@ -10,7 +10,8 @@ const hashtagSchema = new Schema({
   },
 }, {timestamps: true})
 
-hashtagSchema.index({name: 1})
+hashtagSchema.index({ name: 1 });
+hashtagSchema.index({ createdAt: -1 });
 
 
 export const Hashtag = mongoose.model("Hashtag", hashtagSchema)
