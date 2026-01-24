@@ -1,7 +1,7 @@
 import mongoose, { Schema } from "mongoose";
 
 const mentionSchema = new Schema({
-  post: {
+  tweet: {
     type: Schema.Types.ObjectId,
     ref: "Post",
     required: true,
@@ -13,6 +13,10 @@ const mentionSchema = new Schema({
     required: true,
     index: true,
   },
+  isRead: {
+    type: Boolean,
+    default: false
+  }
 }, {timestamps: true});
 
 mentionSchema.index({ post: 1, mentionedUser: 1 }, { unique: true });

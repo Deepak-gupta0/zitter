@@ -1,32 +1,56 @@
 import mongoose from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { getMentionedUsers } from "../utils/UtilityFunctions.js";
 import { Tweet } from "../models/tweet.model.js";
 import { uploadOnCloudinary } from "../utils/Cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
+import { Mention } from "../models/mention.model.js";
+import { Like } from "../models/like.model.js";
+import { Bookmark } from "../models/bookmark.model.js";
+import { Comment } from "../models/comment.model.js";
 
 //PUBLIC CONTROLLERS
 const getUserTweets = asyncHandler(async (req, res) => {
   const { userId } = req.params;
+  const { cursor, limit = 10 } = req.query;
 
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     throw new ApiError(400, "userId is not valid");
   }
 
+  const matchStage = {
+    owner: new mongoose.Types.ObjectId(userId),
+    isPublished: true,
+    isDeleted: false,
+  };
+
+  // 👇 cursor logic
+  if (cursor) {
+    if (!mongoose.Types.ObjectId.isValid(cursor)) {
+      throw new ApiError(400, "cursor is not valid");
+    }
+
+    matchStage._id = {
+      $lt: new mongoose.Types.ObjectId(cursor),
+    };
+  }
+
   const tweets = await Tweet.aggregate([
-    {
-      $match: {
-        owner: new mongoose.Types.ObjectId(userId),
-        isPublished: true,
-        isDeleted: false,
-      },
-    },
+    { $match: matchStage },
+
+    // newest first
+    { $sort: { _id: -1 } },
+
+    // fetch one extra to detect next cursor
+    { $limit: Number(limit) + 1 },
+
     {
       $lookup: {
         from: "users",
-        foreignField: "_id",
         localField: "owner",
+        foreignField: "_id",
         as: "owner",
         pipeline: [
           {
@@ -34,56 +58,65 @@ const getUserTweets = asyncHandler(async (req, res) => {
               username: 1,
               fullName: 1,
               avatar: 1,
-              _id: 1,
             },
           },
         ],
       },
     },
     { $unwind: "$owner" },
+
     {
       $lookup: {
         from: "comments",
-        foreignField: "post",
         localField: "_id",
+        foreignField: "post",
         as: "reply",
       },
     },
     {
       $lookup: {
         from: "reposts",
-        foreignField: "post",
         localField: "_id",
+        foreignField: "post",
         as: "repost",
       },
     },
     {
       $lookup: {
         from: "likes",
-        foreignField: "targetId",
         localField: "_id",
+        foreignField: "targetId",
         as: "likes",
       },
     },
     {
       $addFields: {
-        replyCount: {
-          $size: "$reply",
-        },
-        repostCount: {
-          $size: "$repost",
-        },
-        likesCount: {
-          $size: "$likes",
-        },
+        replyCount: { $size: "$reply" },
+        repostCount: { $size: "$repost" },
+        likesCount: { $size: "$likes" },
       },
     },
   ]);
 
-  return res
-    .status(200)
-    .json(new ApiResponse(200, tweets, "Users tweets fetched successfully."));
-});//need to be fixed 
+  // 👇 pagination handling
+  let nextCursor = null;
+  if (tweets.length > limit) {
+    const lastTweet = tweets.pop(); // extra one remove
+    nextCursor = lastTweet._id;
+  }
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        tweets,
+        nextCursor,
+        hasMore: Boolean(nextCursor),
+      },
+      "User tweets fetched successfully."
+    )
+  );
+});
 
 const getHomeTweets = asyncHandler(async (req, res) => {
   const limit = Number(req.query.limit) || 20;
@@ -383,23 +416,34 @@ const createTweet = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Maximum 5 media files allowed");
   }
 
-  const media = [];
+  // const media = [];
 
-  for (const file of files) {
+ const media = await Promise.all(
+  files.map(async (file) => {
     const result = await uploadOnCloudinary(file.path, "tweets");
 
     const isVideo = file.mimetype.startsWith("video");
     const isGif = file.mimetype === "image/gif";
 
-    media.push({
-      type: isVideo ? "video" : isGif ? "git" : "image",
+    return {
+      type: isVideo ? "video" : isGif ? "gif" : "image",
       url: result.secure_url,
       publicId: result.public_id,
       height: result.height,
       width: result.width,
       duration: result.duration,
-    });
-  }
+    };
+  })
+);
+
+
+  const mentionedUsers = getMentionedUsers(content);
+  const usernames = mentionedUsers.map((u) => u.username);
+
+  const mentionedUserDocs = await User.find({
+    username: { $in: usernames },
+    isActive: true,
+  }).select("_id username");
 
   const tweet = await Tweet.create({
     owner: req.user._id,
@@ -408,9 +452,21 @@ const createTweet = asyncHandler(async (req, res) => {
     content: content.trim(),
   });
 
+ if (mentionedUserDocs.length) {
+  const mentionPayload = mentionedUserDocs.map(user => ({
+    tweet: tweet._id,
+    mentionedUser: user._id,
+    mentionedBy: req.user._id,
+    isRead: false,
+  }));
+
+  await Mention.insertMany(mentionPayload);
+}
+
+
   return res
-    .status(200)
-    .json(new ApiResponse(200, tweet, "Tweet created successfully."));
+    .status(201)
+    .json(new ApiResponse(201, tweet, "Tweet created successfully."));
 });
 
 const updateTweet = asyncHandler(async (req, res) => {
@@ -467,7 +523,7 @@ const deleteTweet = asyncHandler(async (req, res) => {
   }
 
   // 3️⃣ Delete tweet (owner check included)
-  const tweet = await Tweet.findOneAndDelete({
+  const tweet = await Tweet.findOne({
     _id: tweetId,
     owner: req.user._id,
   });
@@ -476,6 +532,19 @@ const deleteTweet = asyncHandler(async (req, res) => {
   if (!tweet) {
     throw new ApiError(404, "Tweet not found or access denied");
   }
+
+  await Promise.all([
+    Mention.deleteMany({ tweet: tweet._id }),
+    Like.deleteMany({ tweet: tweet._id }),
+    Bookmark.deleteMany({ tweet: tweet._id }),
+    Comment.updateMany(
+      { tweet: tweet._id },
+      { $set: { isDeleted: true } }
+    ),
+  ]);
+
+  tweet.isDeleted = true;
+  await tweet.save();
 
   // 5️⃣ Success response
   return res
@@ -544,5 +613,5 @@ export {
   getTrendingTweets,
   getHomeTweets,
   getUserTweets,
-  searchTweets
+  searchTweets,
 };

@@ -15,6 +15,7 @@ import tweetRoute from "./routes/tweet.route.js"
 import likeRoute from "./routes/like.route.js"
 import repostRoute from "./routes/repost.route.js"
 import bookmarkRoute from "./routes/bookmark.route.js"
+import mentionRoute from "./routes/mention.route.js"
 import commentRoute from "./routes/comment.route.js"
 import subscriptionRouter from "./routes/subscription.route.js"
 import cookieParser from "cookie-parser";
@@ -31,5 +32,6 @@ app.use("/api/v1/comments", commentRoute)
 app.use("/api/v1/reposts", repostRoute)
 app.use("/api/v1/subs", subscriptionRouter)
 app.use("/api/v1/bookmarks", bookmarkRoute)
+app.use("/api/v1/mentions", mentionRoute)
 
 export default app;
