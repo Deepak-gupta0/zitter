@@ -26,7 +26,7 @@ const notificationSchema = new Schema(
     },
     entityType: {
       type: String,
-      enum: ["Tweet", "Comment"],
+      enum: ["Tweet", "Comment", "User"],
       required: true,
     },
     isRead: {

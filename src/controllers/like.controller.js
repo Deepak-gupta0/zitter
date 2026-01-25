@@ -5,28 +5,37 @@ import { Like } from "../models/like.model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Tweet } from "../models/tweet.model.js";
 import { Comment } from "../models/comment.model.js";
+import { Notification } from "../models/notification.model.js";
 
 const tweetLike = asyncHandler(async (req, res) => {
-  if (!req.user?._id) {
-    throw new ApiError(401, "Unauthorized request");
-  }
+  const userId = req.user?._id;
+  if (!userId) throw new ApiError(401, "Unauthorized");
 
   const { tweetId } = req.params;
-
   if (!mongoose.Types.ObjectId.isValid(tweetId)) {
     throw new ApiError(400, "Invalid tweet id");
+  }
+
+  const tweet = await Tweet.findOne({
+    _id: tweetId,
+    isPublished: true,
+    isDeleted: false,
+  }).select("_id owner");
+
+  if (!tweet) {
+    throw new ApiError(404, "Tweet not found");
   }
 
   // 1️⃣ Try to create like (idempotent)
   const like = await Like.findOneAndUpdate(
     {
-      likedBy: req.user._id,
+      likedBy: userId,
       targetId: tweetId,
       targetType: "Tweet",
     },
     {
       $setOnInsert: {
-        likedBy: req.user._id,
+        likedBy: userId,
         targetId: tweetId,
         targetType: "Tweet",
       },
@@ -39,20 +48,17 @@ const tweetLike = asyncHandler(async (req, res) => {
 
   // 2️⃣ Increment count ONLY if like was newly created
   if (!like) {
-    const tweetUpdate = await Tweet.updateOne(
-      { _id: tweetId },
-      { $inc: { likesCount: 1 } }
-    );
+    await Tweet.updateOne({ _id: tweetId }, { $inc: { likesCount: 1 } });
 
-    // 3️⃣ Tweet does not exist → rollback like
-    if (tweetUpdate.matchedCount === 0) {
-      await Like.deleteOne({
-        likedBy: req.user._id,
-        targetId: tweetId,
-        targetType: "Tweet",
+    // 3️⃣Made a notify for if A is sending notify to B
+    if (!tweet.owner.equals(userId)) {
+      await Notification.create({
+        sender: userId,
+        receiver: tweet.owner,
+        type: "like",
+        entityType: "Tweet",
+        entityId: tweetId,
       });
-
-      throw new ApiError(404, "Tweet not found");
     }
   }
 
@@ -62,7 +68,9 @@ const tweetLike = asyncHandler(async (req, res) => {
 });
 
 const tweetUnlike = asyncHandler(async (req, res) => {
-  if (!req.user?._id) {
+  const userId = req.user?._id;
+
+  if (!userId) {
     throw new ApiError(401, "Unauthorized request");
   }
 
@@ -70,6 +78,16 @@ const tweetUnlike = asyncHandler(async (req, res) => {
 
   if (!mongoose.Types.ObjectId.isValid(tweetId)) {
     throw new ApiError(400, "Invalid tweet id");
+  }
+
+  const tweet = await Tweet.findOne({
+    _id: tweetId,
+    isPublished: true,
+    isDeleted: false,
+  }).select("_id owner");
+
+  if (!tweet) {
+    throw new ApiError(404, "Tweet not found");
   }
 
   // 1️⃣ Try to delete like
@@ -81,22 +99,19 @@ const tweetUnlike = asyncHandler(async (req, res) => {
 
   // 2️⃣ Decrement count ONLY if like existed
   if (unlike) {
-    const tweetUpdate = await Tweet.updateOne(
+    await Tweet.updateOne(
       { _id: tweetId, likesCount: { $gt: 0 } },
       { $inc: { likesCount: -1 } }
     );
 
-    // Optional safety (rare case)
-    if (tweetUpdate.matchedCount === 0) {
-      // tweet doesn't exist, restore like (very rare)
-      await Like.create({
-        likedBy: req.user._id,
-        targetId: tweetId,
-        targetType: "Tweet",
-      });
-
-      throw new ApiError(404, "Tweet not found");
-    }
+    //delete notification
+    await Notification.deleteMany({
+      sender: userId,
+      receiver: tweet.owner._id ?? tweet.owner,
+      type: "like",
+      entityType: "Tweet",
+      entityId: tweetId,
+    });
   }
 
   return res
@@ -105,7 +120,9 @@ const tweetUnlike = asyncHandler(async (req, res) => {
 });
 
 const commentLike = asyncHandler(async (req, res) => {
-  if (!req.user?._id) {
+  const userId = req.user?._id;
+
+  if (!userId) {
     throw new ApiError(401, "Unauthorized request");
   }
 
@@ -115,21 +132,24 @@ const commentLike = asyncHandler(async (req, res) => {
     throw new ApiError(400, "comment id is invalid");
   }
 
-  const comment = await Comment.findOne({_id: commentId, isDeleted: false})
+  const comment = await Comment.findOne({
+    _id: commentId,
+    isDeleted: false,
+  }).select("_id owner");
 
-  if(!comment){
-    throw new ApiError(404, "Comment not found")
+  if (!comment) {
+    throw new ApiError(404, "Comment not found");
   }
 
   const like = await Like.findOneAndUpdate(
     {
-      likedBy: req.user._id,
+      likedBy: userId,
       targetId: commentId,
       targetType: "Comment",
     },
     {
       $setOnInsert: {
-        likedBy: req.user._id,
+        likedBy: userId,
         targetId: commentId,
         targetType: "Comment",
       },
@@ -138,20 +158,16 @@ const commentLike = asyncHandler(async (req, res) => {
   );
 
   if (!like) {
-    const commentUpdate = await Comment.updateOne(
-      { _id: commentId },
-      { $inc: { likesCount: 1 } }
-    );
+    await Comment.updateOne({ _id: commentId }, { $inc: { likesCount: 1 } });
 
-    // 3️⃣ Tweet does not exist → rollback like
-    if (commentUpdate.matchedCount === 0) {
-      await Like.deleteOne({
-        likedBy: req.user._id,
-        targetId: commentId,
-        targetType: "Comment",
+    if (!comment.owner.equals(userId)) {
+      await Notification.create({
+        sender: userId,
+        receiver: comment.owner,
+        type: "like",
+        entityType: "Comment",
+        entityId: commentId,
       });
-
-      throw new ApiError(404, "Comment not found");
     }
   }
 
@@ -161,7 +177,9 @@ const commentLike = asyncHandler(async (req, res) => {
 });
 
 const commentUnlike = asyncHandler(async (req, res) => {
-  if (!req.user?._id) {
+  const userId = req.user?._id;
+
+  if (!userId) {
     throw new ApiError(401, "Unauthorized request");
   }
 
@@ -171,39 +189,41 @@ const commentUnlike = asyncHandler(async (req, res) => {
     throw new ApiError(400, "comment id is invalid");
   }
 
-  const comment = await Comment.findOne({_id: commentId, isDeleted: false})
+  const comment = await Comment.findOne({
+    _id: commentId,
+    isDeleted: false,
+  }).select("_id owner");
 
-  if(!comment){
-    throw new ApiError(404, "Comment not found")
+  if (!comment) {
+    throw new ApiError(404, "Comment not found");
   }
 
   const unlike = await Like.findOneAndDelete({
-    likedBy: req.user._id,
+    likedBy: userId,
     targetId: commentId,
     targetType: "Comment",
   });
 
   if (unlike) {
-    const commentUpdate = await Comment.updateOne(
+    await Comment.updateOne(
       { _id: commentId, likesCount: { $gt: 0 } },
       { $inc: { likesCount: -1 } }
     );
 
-    if (commentUpdate.matchedCount === 0) {
-      // tweet doesn't exist, restore like (very rare)
-      await Like.create({
-        likedBy: req.user._id,
-        targetId: commentId,
-        targetType: "Comment",
-      });
-
-      throw new ApiError(404, "Tweet not found");
-    }
+    await Notification.deleteMany({
+        sender: userId,
+        receiver: comment.owner._id ?? comment.owner,
+        type: "like",
+        entityType: "Comment",
+        entityId: commentId,
+    });
   }
 
   return res
     .status(200)
-    .json(new ApiResponse(200, {liked: false}, "Comment unlike successfully"));
+    .json(
+      new ApiResponse(200, { liked: false }, "Comment unlike successfully")
+    );
 });
 
 export { tweetLike, tweetUnlike, commentLike, commentUnlike };

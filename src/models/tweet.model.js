@@ -40,12 +40,17 @@ const tweetSchema = new mongoose.Schema(
       type: String,
       trim: true,
       index: true,
+      maxlength: 280,
     },
     owner: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
       ref: "User",
       index: true,
+    },
+    originalTweet: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Tweet",
     },
 
     replyCount: { type: Number, default: 0, min: 0 },
@@ -66,11 +71,14 @@ const tweetSchema = new mongoose.Schema(
     type: {
       type: String,
       enum: ["QUOTE", "TWEET"],
-    }
+      required: true,
+      default: "TWEET",
+    },
   },
   { timestamps: true }
 );
-tweetSchema.index({ owner: 1, createdAt: -1 })
+tweetSchema.index({ owner: 1, createdAt: -1 });
+tweetSchema.index({ isDeleted: 1, isPublished: 1, createdAt: -1 });
 
 tweetSchema.plugin(mongooseAggregatePaginate);
 

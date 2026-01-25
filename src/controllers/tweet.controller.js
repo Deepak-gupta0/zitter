@@ -15,6 +15,7 @@ import { Bookmark } from "../models/bookmark.model.js";
 import { Comment } from "../models/comment.model.js";
 import { Hashtag } from "../models/hashtag.model.js";
 import { HashtagTweet } from "../models/hashtagTweet.model.js";
+import { Notification } from "../models/notification.model.js";
 
 //PUBLIC CONTROLLERS
 const getUserTweets = asyncHandler(async (req, res) => {
@@ -466,33 +467,56 @@ const createTweet = asyncHandler(async (req, res) => {
     content,
   });
 
-  // 🔹 save mentions
+  // 🔹 save mentions + 🔔 notifications
   if (mentionedUserDocs.length) {
-    const mentionPayload = mentionedUserDocs.map((user) => ({
-      tweet: tweet._id,
-      mentionedUser: user._id,
-      mentionedBy: req.user._id,
-      isRead: false,
-    }));
+    const mentionPayload = [];
+    const notificationPayload = [];
 
-    await Mention.insertMany(mentionPayload);
+    for (const user of mentionedUserDocs) {
+      // mention record
+      mentionPayload.push({
+        tweet: tweet._id,
+        mentionedUser: user._id,
+        mentionedBy: req.user._id,
+        isRead: false,
+      });
+
+      // self mention → no notification
+      if (!user._id.equals(req.user._id)) {
+        notificationPayload.push({
+          sender: req.user._id,
+          receiver: user._id,
+          type: "mention",
+          entityType: "Tweet",
+          entityId: tweet._id,
+          isRead: false,
+        });
+      }
+    }
+
+    await Promise.all([
+      Mention.insertMany(mentionPayload),
+      notificationPayload.length
+        ? Notification.insertMany(notificationPayload)
+        : Promise.resolve(),
+    ]);
   }
 
   // ===============================
-  // 🔥 HASHTAG LOGIC (NEW)
+  // 🔥 HASHTAG LOGIC
   // ===============================
 
   const hashtags = extractHashtags(content);
 
   if (hashtags.length) {
     const hashtagDocs = await Promise.all(
-      hashtags.map(async (tag) => {
-        return Hashtag.findOneAndUpdate(
+      hashtags.map((tag) =>
+        Hashtag.findOneAndUpdate(
           { name: tag },
           { $setOnInsert: { name: tag } },
           { upsert: true, new: true }
-        );
-      })
+        )
+      )
     );
 
     const hashtagTweetPayload = hashtagDocs.map((hashtag) => ({
@@ -502,8 +526,6 @@ const createTweet = asyncHandler(async (req, res) => {
 
     await HashtagTweet.insertMany(hashtagTweetPayload);
   }
-
-  // ===============================
 
   return res
     .status(201)
@@ -576,9 +598,20 @@ const deleteTweet = asyncHandler(async (req, res) => {
 
   await Promise.all([
     Mention.deleteMany({ tweet: tweet._id }),
-    Like.deleteMany({ tweet: tweet._id }),
+    Like.deleteMany({
+      targetId: tweet._id,
+      targetType: "Tweet",
+    }),
     Bookmark.deleteMany({ tweet: tweet._id }),
     Comment.updateMany({ tweet: tweet._id }, { $set: { isDeleted: true } }),
+    Tweet.updateMany(
+      { originalTweet: tweet._id },
+      { $set: { isDeleted: true } }
+    ),
+    Notification.deleteMany({
+      entityType: "Tweet",
+      entityId: tweet._id,
+    }),
   ]);
 
   tweet.isDeleted = true;

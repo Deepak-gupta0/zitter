@@ -4,6 +4,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js";
 import { Subscription } from "../models/subscription.model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { Notification } from "../models/notification.model.js";
 
 const getUserFollowers = asyncHandler(async (req, res) => {
   const { userId } = req.params;
@@ -157,7 +158,9 @@ const getUserFollowing = asyncHandler(async (req, res) => {
 });
 
 const createSubscription = asyncHandler(async (req, res) => {
-  if (!req.user?._id) {
+  const userId = req.user?._id;
+
+  if (!userId) {
     throw new ApiError(401, "Unauthorized request.");
   }
 
@@ -181,31 +184,44 @@ const createSubscription = asyncHandler(async (req, res) => {
     return res.status(200).json(new ApiResponse(200, {}, "Already subscribed"));
   }
 
+  if (userId.toString() === channelId.toString()) {
+    throw new ApiError(400, "You cannot follow-unfollow yourself");
+  }
+
   await Promise.all([
     Subscription.create({
       channel: channelId,
       follower: req.user._id,
     }),
 
-    User.updateOne(
-      { _id: channelId },
-      { $inc: { followerCount: 1 } }
-    ),
+    User.updateOne({ _id: channelId }, { $inc: { followerCount: 1 } }),
 
-    User.updateOne(
-      { _id: req.user._id },
-      { $inc: { followingCount: 1 } }
-    ),
+    User.updateOne({ _id: req.user._id }, { $inc: { followingCount: 1 } }),
+
+    Notification.create({
+      sender: userId,
+      receiver: channelId,
+      type: "follow",
+      entityType: "User",
+      entityId: userId,
+    }),
   ]);
-
 
   return res
     .status(201)
-    .json(new ApiResponse(201, subs, "Channel subscribed successfully."));
+    .json(
+      new ApiResponse(
+        201,
+        { subscribed: true },
+        "Channel subscribed successfully."
+      )
+    );
 });
 
-const deleteSubscription = asyncHandler(async(req, res) => {
-  if (!req.user?._id) {
+const deleteSubscription = asyncHandler(async (req, res) => {
+  const userId = req.user?._id;
+
+  if (!userId) {
     throw new ApiError(401, "Unauthorized request.");
   }
 
@@ -229,6 +245,10 @@ const deleteSubscription = asyncHandler(async(req, res) => {
     return res.status(200).json(new ApiResponse(200, {}, "Not subscribed"));
   }
 
+  if (userId.toString() === channelId.toString()) {
+    throw new ApiError(400, "You cannot follow-unfollow yourself");
+  }
+
   await Promise.all([
     Subscription.deleteOne({
       channel: channelId,
@@ -236,21 +256,31 @@ const deleteSubscription = asyncHandler(async(req, res) => {
     }),
 
     User.updateOne(
-      { _id: channelId,  followerCount: { $gt: 0 }},
-      { $inc: { followerCount: -1} }
+      { _id: channelId, followerCount: { $gt: 0 } },
+      { $inc: { followerCount: -1 } }
     ),
 
     User.updateOne(
-      { _id: req.user._id,  followingCount: { $gt: 0 }},
+      { _id: req.user._id, followingCount: { $gt: 0 } },
       { $inc: { followingCount: -1 } }
     ),
+
+    Notification.findOneAndDelete({
+      sender: userId,
+      receiver: channelId,
+      type: "follow",
+      entityType: "User",
+      entityId: userId
+    })
   ]);
-
-
   return res
     .status(201)
     .json(new ApiResponse(201, {}, "Channel Unsubscribed successfully."));
+});
 
-})
-
-export { getUserFollowers, getUserFollowing, createSubscription, deleteSubscription };
+export {
+  getUserFollowers,
+  getUserFollowing,
+  createSubscription,
+  deleteSubscription,
+};

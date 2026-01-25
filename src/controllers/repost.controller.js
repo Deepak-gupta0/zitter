@@ -4,119 +4,9 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import mongoose from "mongoose";
 import { Tweet } from "../models/tweet.model.js";
+import { Notification } from "../models/notification.model.js";
 
-const createRepost = asyncHandler(async (req, res) => {
-  if (!req.user?._id) {
-    throw new ApiError(401, "Unauthorised request");
-  }
-
-  const { tweetId } = req.params;
-
-  if (!mongoose.Types.ObjectId.isValid(tweetId)) {
-    throw new ApiError(400, "Tweet id is invalid");
-  }
-
-  const tweet = await Tweet.findOne({ _id: tweetId, isDeleted: false });
-  if (!tweet) {
-    throw new ApiError(404, "Tweet not found");
-  }
-
-  try {
-    const repost = await Repost.create({
-      user: req.user._id,
-      tweet: tweetId,
-    });
-
-    await Tweet.findByIdAndUpdate(tweetId, {
-      $inc: { repostCount: 1 },
-    });
-
-    return res
-      .status(201)
-      .json(new ApiResponse(201, repost, "Reposted successfully."));
-  } catch (error) {
-    if (error.code === 11000) {
-      throw new ApiError(409, "Tweet already reposted");
-    }
-    throw error;
-  }
-});
-
-const deleteRepost = asyncHandler(async (req, res) => {
-  if (!req.user?._id) {
-    throw new ApiError(401, "Unauthorised request");
-  }
-
-  const { tweetId } = req.params;
-
-  if (!mongoose.Types.ObjectId.isValid(tweetId)) {
-    throw new ApiError(400, "Tweet id is invalid");
-  }
-
-  const repost = await Repost.findOneAndDelete({
-    user: req.user._id,
-    tweet: tweetId,
-  });
-
-  if (!repost) {
-    throw new ApiError(404, "Repost not found");
-  }
-
-  await Tweet.findByIdAndUpdate(tweetId, {
-    $inc: { repostCount: -1 },
-  });
-
-  return res
-    .status(200)
-    .json(
-      new ApiResponse(200, { deleted: true }, "Repost deleted successfully.")
-    );
-});
-
-const createRepostQuote = asyncHandler(async (req, res) => {
-  if (!req.user?._id) {
-    throw new ApiError(401, "Unauthorised request");
-  }
-
-  const { tweetId } = req.params;
-  const { content } = req.body;
-
-  if (!mongoose.Types.ObjectId.isValid(tweetId)) {
-    throw new ApiError(400, "Tweet id is invalid");
-  }
-  if (!content || !content.trim()) {
-    throw new ApiError(400, "content is required");
-  }
-  if (content.trim().length > 280) {
-    throw new ApiError(400, "Quote content too long");
-  }
-
-  const tweet = await Tweet.findOne({ _id: tweetId, isDeleted: false });
-
-  if (!tweet) {
-    throw new ApiError(404, "Tweet not found");
-  }
-
-  if (tweet.type === "QUOTE") {
-    throw new ApiError(400, "Cannot quote a quote tweet");
-  }
-
-  const quote = await Tweet.create({
-    type: "QUOTE",
-    content: content.trim(),
-    owner: req.user._id,
-    originalTweet: tweetId,
-  });
-
-  await Tweet.findByIdAndUpdate(tweetId, {
-    $inc: { quoteCount: 1 },
-  });
-
-  return res
-    .status(201)
-    .json(new ApiResponse(201, quote, "Quoter created successfully"));
-});
-
+// ===================PUBLIC ROUTE=============================
 const getRepostsOfTweet = asyncHandler(async (req, res) => {
   const { tweetId } = req.params;
   const { cursor } = req.query;
@@ -281,6 +171,175 @@ const getRepostQuotes = asyncHandler(async (req, res) => {
       "Quotes fetched successfully"
     )
   );
+});
+
+// =====================PROTECTED ROUTE=============================
+const createRepost = asyncHandler(async (req, res) => {
+  const userId = req.user?._id;
+  if (!userId) {
+    throw new ApiError(401, "Unauthorised request");
+  }
+
+  const { tweetId } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(tweetId)) {
+    throw new ApiError(400, "Tweet id is invalid");
+  }
+
+  const tweet = await Tweet.findOne({
+    _id: tweetId,
+    isDeleted: false,
+    isPublished: true,
+  }).select("_id owner");
+  if (!tweet) {
+    throw new ApiError(404, "Tweet not found");
+  }
+
+  try {
+    const repost = await Repost.create({
+      user: userId,
+      tweet: tweetId,
+    });
+
+    await Tweet.updateOne({ _id: tweetId }, { $inc: { repostCount: 1 } });
+
+    if (!tweet.owner.equals(userId)) {
+      await Notification.create({
+        sender: userId,
+        receiver: tweet.owner,
+        type: "repost",
+        entityType: "Tweet",
+        entityId: tweet._id,
+      });
+    }
+
+    return res
+      .status(201)
+      .json(new ApiResponse(201, repost, "Reposted successfully."));
+  } catch (error) {
+    if (error.code === 11000) {
+      throw new ApiError(409, "Tweet already reposted");
+    }
+    throw error;
+  }
+});
+
+const deleteRepost = asyncHandler(async (req, res) => {
+  const userId = req.user?._id;
+  if (!userId) {
+    throw new ApiError(401, "Unauthorised request");
+  }
+
+  const { tweetId } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(tweetId)) {
+    throw new ApiError(400, "Tweet id is invalid");
+  }
+
+  const tweet = await Tweet.findOne({
+    _id: tweetId,
+    isPublished: true,
+    isDeleted: false,
+  }).select("_id owner");
+
+  if (!tweet) {
+    throw new ApiError(404, "Tweet not found.");
+  }
+
+  const repost = await Repost.findOneAndDelete({
+    user: req.user._id,
+    tweet: tweetId,
+  });
+
+  if (!repost) {
+    throw new ApiError(404, "Repost not found");
+  }
+
+  if (repost) {
+    await Tweet.updateOne(
+      { _id: tweetId, repostCount: { $gt: 0 } },
+      { $inc: { repostCount: -1 } }
+    );
+
+    await Notification.deleteMany({
+      sender: userId,
+      receiver: tweet.owner,
+      type: "repost",
+      entityType: "Tweet",
+      entityId: tweet._id,
+    });
+  }
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, { deleted: true }, "Repost deleted successfully.")
+    );
+});
+
+const createRepostQuote = asyncHandler(async (req, res) => {
+  const userId = req.user?._id;
+  if (!userId) {
+    throw new ApiError(401, "Unauthorised request");
+  }
+
+  const { tweetId } = req.params;
+  const { content } = req.body;
+
+  if (!mongoose.Types.ObjectId.isValid(tweetId)) {
+    throw new ApiError(400, "Tweet id is invalid");
+  }
+  if (!content || !content.trim()) {
+    throw new ApiError(400, "content is required");
+  }
+  if (content.trim().length > 280) {
+    throw new ApiError(400, "Quote content too long");
+  }
+
+  const tweet = await Tweet.findOne({ _id: tweetId, isDeleted: false }).select(
+    "_id owner"
+  );
+
+  if (!tweet) {
+    throw new ApiError(404, "Tweet not found");
+  }
+
+  if (tweet.type === "QUOTE") {
+    throw new ApiError(400, "Cannot quote a quote tweet");
+  }
+
+  const alreadyQuoted = await Tweet.exists({
+    owner: userId,
+    originalTweet: tweetId,
+    type: "QUOTE",
+  });
+
+  if(alreadyQuoted){
+    throw new ApiError(409, "Quote already exists")
+  }
+
+  const quote = await Tweet.create({
+    type: "QUOTE",
+    content: content.trim(),
+    owner: req.user._id,
+    originalTweet: tweetId,
+  });
+
+  await Tweet.findByIdAndUpdate(tweetId, {
+    $inc: { quoteCount: 1 },
+  });
+
+  await Notification.create({
+    sender: userId,
+    receiver: tweet.owner,
+    type: "repost",
+    entityType: "Tweet",
+    entityId: tweet._id,
+  });
+
+  return res
+    .status(201)
+    .json(new ApiResponse(201, quote, "Quote created successfully"));
 });
 
 export {

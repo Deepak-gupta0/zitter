@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { checkIsActive } from "../middlewares/isActive.middleware.js";
 import { verifyJwt } from "../middlewares/auth.middleware.js";
-import { getTweetComments, createComment, updateComment, deleteComment, getCommentReplies, createReplyOnComment, getComment } from "../controllers/comment.controller.js";
+import { getTweetComments, createComment, updateComment, deleteComment, getCommentReplies, createReplyOnComment, getAComment } from "../controllers/comment.controller.js";
 
 
 const router = Router()
@@ -9,7 +9,7 @@ const router = Router()
 // 🌍 PUBLIC
 router.get("/tweets/:tweetId/comments", getTweetComments)
 router.get("/:commentId/replies", getCommentReplies)
-router.get("/:commentId", getComment)
+router.get("/:commentId", getAComment)
 
 
 // 🔐 PROTECTED
