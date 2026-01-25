@@ -40,6 +40,7 @@ const notificationSchema = new Schema(
 
 notificationSchema.index({ receiver: 1, createdAt: -1 });
 notificationSchema.index({ receiver: 1, isRead: 1 });
+notificationSchema.index({ receiver: 1 });
 
 notificationSchema.index(
   { sender: 1, receiver: 1, type: 1, entityId: 1 },
