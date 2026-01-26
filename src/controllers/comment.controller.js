@@ -335,7 +335,6 @@ const createReplyOnComment = asyncHandler(async (req, res) => {
     { $inc: { replyCount: 1 } }
   );
 
-
   if (!parentComment.owner.equals(userId)) {
     await Notification.create({
       sender: userId,

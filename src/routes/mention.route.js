@@ -13,8 +13,8 @@ import { checkIsActive } from "../middlewares/isActive.middleware.js";
 /* ───────────────── PUBLIC ROUTES ───────────────── */
 const router = Router()
 
-// 🔓 Public: kisi post ke mentions (read-only)
-router.get("/tweet/:tweetId", getTweetMentions);
+// 🔓 Public: kisiko kisko mention kia gya hai post mei
+router.get("/tweets/:tweetId", getTweetMentions);
 
 /* ─────────────── PROTECTED ROUTES ─────────────── */
 

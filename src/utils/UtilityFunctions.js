@@ -15,7 +15,13 @@ const getMentionedUserNames = (content) => {
 
 const extractHashtags = (text = "") => {
   const matches = text.match(/#[\w]+/g) || [];
-  return [...new Set(matches.map(tag => tag.slice(1).toLowerCase()))];
+  return [...new Set(matches.map((tag) => tag.slice(1).toLowerCase()))];
 };
 
-export {getMentionedUserNames, extractHashtags}
+const getPublicIdOfFile = (imageUrl) => {
+  const splitImage = imageUrl.split("/");
+  const publicId = splitImage[splitImage.length - 1].split(".")[0];
+  return publicId;
+};
+
+export { getMentionedUserNames, extractHashtags, getPublicIdOfFile };

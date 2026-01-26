@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { verifyJwt } from "../middlewares/auth.middleware.js";
+import { optionalAuth, verifyJwt } from "../middlewares/auth.middleware.js";
 import { checkIsActive } from "../middlewares/isActive.middleware.js";
 import {
   registerUser,
@@ -14,6 +14,8 @@ import {
   updateAvatar,
   updateCoverImage,
   deleteAccount,
+  deleteAvatar,
+  deleteCoverImage,
 } from "../controllers/user.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 
@@ -23,7 +25,7 @@ const router = Router();
 router.post("/register", registerUser);
 router.post("/login", loginUser);
 router.post("/refresh-token", refreshAccessToken);
-router.get("/profile/:username", getUserProfile);
+router.get("/profile/:username", optionalAuth, getUserProfile);
 router.get("/search", searchUsers);
 
 // 🔐 PROTECTED ROUTES
@@ -34,7 +36,9 @@ router.get("/me", getCurrentUser);
 router.patch("/profile", updateAccountDetails);
 router.patch("/password", changePassword);
 router.patch("/avatar", upload.single("avatar"), updateAvatar);
+router.delete("/avatar", deleteAvatar)
 router.patch("/cover-image", upload.single("coverImage"), updateCoverImage);
+router.delete("/cover-image", deleteCoverImage)
 router.delete("/account", deleteAccount);
 
 export default router;

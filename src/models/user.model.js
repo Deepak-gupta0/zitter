@@ -55,7 +55,7 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-    postCount: {
+    tweetsCount: {
       type: Number,
       default: 0,
     },

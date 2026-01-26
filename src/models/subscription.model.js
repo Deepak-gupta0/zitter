@@ -24,11 +24,10 @@ subscriptionSchema.index(
 );
 
 // ❌ Optional but good validation (enable if you want)
-subscriptionSchema.pre("save", function (next) {
+subscriptionSchema.pre("save", function () {
   if (this.channel.equals(this.follower)) {
-    return next(new Error("User cannot follow themselves"));
+    return new Error("User cannot follow themselves");
   }
-  next();
 });
 
 subscriptionSchema.plugin(mongooseAggregatePaginate);

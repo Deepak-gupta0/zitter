@@ -110,16 +110,16 @@ const searchHashTags = asyncHandler(async (req, res) => {
 
 
 const getTweetsByHashtags = asyncHandler(async (req, res) => {
-  const { tag } = req.params;
+  const { q } = req.query;
   const { cursor } = req.query;
   const limit = Number(req.query.limit) || 15;
 
-  if (!tag || !tag.trim()) {
+  if (!q || !q.trim()) {
     throw new ApiError(400, "Tag is required");
   }
 
   const matchHashtagTweet = {
-    "hashtag.name": tag.toLowerCase().trim(),
+    "hashtag.name": q.toLowerCase().trim(),
   };
 
   if (cursor) {

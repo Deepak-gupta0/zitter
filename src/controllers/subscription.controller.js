@@ -126,7 +126,7 @@ const getUserFollowing = asyncHandler(async (req, res) => {
       },
     },
     {
-      $unwind: "channel",
+      $unwind: "$channel",
     },
     {
       $project: {
@@ -138,10 +138,10 @@ const getUserFollowing = asyncHandler(async (req, res) => {
 
   let hasMore = false;
   let nextCursor = null;
-  if (followers.length > limit) {
+  if (following.length > limit) {
     hasMore = true;
-    nextCursor = followers[limit - 1]._id;
-    followers.pop();
+    nextCursor = followerfollowing[limit - 1]._id;
+    followerfollowing.pop();
   }
 
   return res.status(200).json(
@@ -177,7 +177,7 @@ const createSubscription = asyncHandler(async (req, res) => {
 
   const alreadySubscribed = await Subscription.exists({
     channel: channelId,
-    follower: req.user._id,
+    follower: userId,
   });
 
   if (alreadySubscribed) {

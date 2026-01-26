@@ -36,7 +36,7 @@ app.use("/api/v1/subs", subscriptionRouter)
 app.use("/api/v1/bookmarks", bookmarkRoute)
 app.use("/api/v1/mentions", mentionRoute)
 app.use("/api/v1/hashtags", hashtagRoute)
-app.use("/api/v1/notification", notificationRoute)
+app.use("/api/v1/notifications", notificationRoute)
 
 
 export default app;

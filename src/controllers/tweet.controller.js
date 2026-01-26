@@ -450,8 +450,8 @@ const createTweet = asyncHandler(async (req, res) => {
   );
 
   // 🔹 mentions
-  const mentionedUsers = getMentionedUserNames(content);
-  const usernames = mentionedUsers.map((u) => u.username);
+  const usernames = getMentionedUserNames(content);
+  // const usernames = mentionedUsers.map((u) => u.username);
 
   const mentionedUserDocs = await User.find({
     username: { $in: usernames },

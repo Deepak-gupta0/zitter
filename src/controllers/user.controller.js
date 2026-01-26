@@ -4,8 +4,12 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
 import { options } from "../constant.js";
 import jwt from "jsonwebtoken";
-import { uploadOnCloudinary } from "../utils/Cloudinary.js";
+import {
+  deleteFromCloudinary,
+  uploadOnCloudinary,
+} from "../utils/Cloudinary.js";
 import mongoose from "mongoose";
+import { getPublicIdOfFile } from "../utils/UtilityFunctions.js";
 
 const registerUser = asyncHandler(async (req, res) => {
   const { username, email, password } = req.body;
@@ -341,8 +345,75 @@ const updateCoverImage = asyncHandler(async (req, res) => {
     );
 });
 
+const deleteAvatar = asyncHandler(async (req, res) => {
+  const userId = req.user?._id;
+
+  if (!userId) {
+    throw new ApiError(401, "Unauthorized request.");
+  }
+
+  const user = await User.findById(userId).select("avatar");
+
+  if (!user?.avatar) {
+    throw new ApiError(400, "Avatar not found");
+  }
+
+  const publicId = getPublicIdOfFile(user.avatar);
+
+  if (!publicId) {
+    throw new ApiError(400, "Invalid avatar url");
+  }
+
+  // best effort delete (no hard fail)
+  await deleteFromCloudinary(publicId);
+
+  // DB update (source of truth)
+  user.avatar = null;
+  await user.save();
+
+  return res.status(200).json(
+    new ApiResponse(200, null, "Avatar deleted successfully.")
+  );
+});
+
+const deleteCoverImage = asyncHandler(async (req, res) => {
+  const userId = req.user?._id;
+
+  if (!userId) {
+    throw new ApiError(401, "Unauthorized request.");
+  }
+
+  const user = await User.findById(userId).select("coverImage");
+
+  if (!user?.coverImage) {
+    throw new ApiError(400, "Cover image not found");
+  }
+
+  const publicId = getPublicIdOfFile(user.coverImage);
+
+  if (!publicId) {
+    throw new ApiError(400, "Invalid cover image url");
+  }
+
+  // best effort delete (no hard fail)
+  await deleteFromCloudinary(publicId);
+
+  // DB update (source of truth)
+  user.coverImage = null;
+  await user.save();
+
+  return res.status(200).json(
+    new ApiResponse(200, null, "Cover image deleted successfully.")
+  );
+});
+
 const getUserProfile = asyncHandler(async (req, res) => {
   const { username } = req.params;
+
+  let isOwner = false;
+  if (req.user?._id) {
+    isOwner = true;
+  }
 
   if (!username?.trim()) {
     throw new ApiError("Username is required");
@@ -370,7 +441,7 @@ const getUserProfile = asyncHandler(async (req, res) => {
     },
     {
       $lookup: {
-        from: "posts",
+        from: "tweets",
         let: { userId: "$_id" },
         pipeline: [
           { $match: { $expr: { $eq: ["$owner", "$$userId"] } } },
@@ -398,6 +469,8 @@ const getUserProfile = asyncHandler(async (req, res) => {
         followers: 0,
         following: 0,
         tweets: 0,
+        password: 0,
+        __v: 0,
       },
     },
   ]);
@@ -408,7 +481,13 @@ const getUserProfile = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(200, profile[0], "Channel get successfully"));
+    .json(
+      new ApiResponse(
+        200,
+        { ...profile[0], isOwner },
+        "Channel get successfully"
+      )
+    );
 });
 
 const searchUsers = asyncHandler(async (req, res) => {
@@ -481,4 +560,6 @@ export {
   updateCoverImage,
   deleteAccount,
   refreshAccessToken,
+  deleteAvatar,
+  deleteCoverImage
 };
