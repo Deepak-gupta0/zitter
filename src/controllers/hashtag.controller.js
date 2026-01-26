@@ -1,10 +1,10 @@
-import { asyncHandler, asynchandler } from "../utils/asyncHandler.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { Hashtag } from "../models/hashtag.model.js";
 import { HashtagTweet } from "../models/hashtagTweet.model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 
-const getTrendingHashtag = asynchandler(async (req, res) => {
+const getTrendingHashtag = asyncHandler(async (req, res) => {
   const limit = Number(req.query.limit) || 10;
 
   const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -64,7 +64,7 @@ const getTrendingHashtag = asynchandler(async (req, res) => {
     );
 });
 
-const searchHashTags = asynchandler(async (req, res) => {
+const searchHashTags = asyncHandler(async (req, res) => {
   const { q, cursor } = req.query;
   const limit = Number(req.query.limit) || 10;
 
@@ -197,3 +197,5 @@ const getTweetsByHashtags = asyncHandler(async (req, res) => {
     )
   );
 });
+
+export {getTrendingHashtag, getTweetsByHashtags,searchHashTags };

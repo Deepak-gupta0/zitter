@@ -1,34 +1,39 @@
 import mongoose from "mongoose";
 import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 
-const subscriptionSchema = new mongoose.Schema({
-  channel : {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    index: true,
-    required : true,
+const subscriptionSchema = new mongoose.Schema(
+  {
+    channel: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    follower: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
   },
-  follower : {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    index : true,
-    required : true,
-  },
-}, {timestamps: true})
+  { timestamps: true }
+);
 
-subscriptionSchema.index({channel: 1, follower: 1}, {unique: true})
+// 🔥 Prevent duplicate subscriptions
+subscriptionSchema.index(
+  { channel: 1, follower: 1 },
+  { unique: true }
+);
 
-subscriptionSchema.pre(function (next) {
-  if(this.channel.equals(this.follower)) {
-    return next(new Error("User cannot follow themselves"))
+// ❌ Optional but good validation (enable if you want)
+subscriptionSchema.pre("save", function (next) {
+  if (this.channel.equals(this.follower)) {
+    return next(new Error("User cannot follow themselves"));
   }
+  next();
+});
 
-  return next();
-})
+subscriptionSchema.plugin(mongooseAggregatePaginate);
 
-subscriptionSchema.index({ channel: 1, _id: -1 });
-subscriptionSchema.index({ follower: 1, _id: -1 });
-
-subscriptionSchema.plugin(mongooseAggregatePaginate)
-
-export const Subscription = mongoose.model("Subscription", subscriptionSchema)
+export const Subscription = mongoose.model(
+  "Subscription",
+  subscriptionSchema
+);

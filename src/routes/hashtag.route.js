@@ -1,4 +1,5 @@
 import { Router } from "express"
+import { getTrendingHashtag, getTweetsByHashtags, searchHashTags } from "../controllers/hashtag.controller.js"
 
 const router = Router()
 // -----------------Public Route--------------------//

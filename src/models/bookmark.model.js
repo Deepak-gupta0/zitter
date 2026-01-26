@@ -19,7 +19,7 @@ const bookmarkSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-bookmarkSchema.index({ post: 1, user: 1 }, { unique: true });
+bookmarkSchema.index({ tweet: 1, user: 1 }, { unique: true });
 bookmarkSchema.index({ user: 1, createdAt: -1 });
 bookmarkSchema.index({ createdAt: -1 });
 

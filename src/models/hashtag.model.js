@@ -10,7 +10,7 @@ const hashtagSchema = new Schema({
   },
 }, {timestamps: true})
 
-hashtagSchema.index({ name: 1 });
+// hashtagSchema.index({ name: 1 });
 hashtagSchema.index({ createdAt: -1 });
 
 

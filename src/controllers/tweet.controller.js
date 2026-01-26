@@ -2,8 +2,7 @@ import mongoose from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
-  extractHashtags,
-  getMentionedUsers,
+  getMentionedUserNames, extractHashtags
 } from "../utils/UtilityFunctions.js";
 import { Tweet } from "../models/tweet.model.js";
 import { uploadOnCloudinary } from "../utils/Cloudinary.js";
@@ -451,7 +450,7 @@ const createTweet = asyncHandler(async (req, res) => {
   );
 
   // 🔹 mentions
-  const mentionedUsers = getMentionedUsers(content);
+  const mentionedUsers = getMentionedUserNames(content);
   const usernames = mentionedUsers.map((u) => u.username);
 
   const mentionedUserDocs = await User.find({

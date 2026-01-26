@@ -40,7 +40,7 @@ const commentSchema = new mongoose.Schema({
   }
 }, {timestamps: true});
 
-commentSchema.index({ post: 1, createdAt: -1 });
+commentSchema.index({ tweet: 1, createdAt: -1 });
 commentSchema.index({ parentComment: 1, createdAt: 1 });
 commentSchema.index({ owner: 1, createdAt: -1 });
 commentSchema.plugin(mongooseAggregatePaginate);

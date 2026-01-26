@@ -19,7 +19,7 @@ const mentionSchema = new Schema({
   }
 }, {timestamps: true});
 
-mentionSchema.index({ post: 1, mentionedUser: 1 }, { unique: true });
+mentionSchema.index({ tweet: 1, mentionedUser: 1 }, { unique: true });
 mentionSchema.index({ mentionedUser: 1, createdAt: -1 });
 
 export const Mention = mongoose.model("Mention", mentionSchema);
