@@ -9,7 +9,12 @@ import {
   uploadOnCloudinary,
 } from "../utils/Cloudinary.js";
 import mongoose from "mongoose";
-import { getPublicIdOfFile } from "../utils/UtilityFunctions.js";
+import {
+  convertToUsername,
+  getPublicIdOfFile,
+} from "../utils/UtilityFunctions.js";
+import { registerSchema } from "../schemas/register.schema.js";
+import { loginSchema } from "../schemas/login.schema.js";
 
 const registerUser = asyncHandler(async (req, res) => {
   const { username, email, password } = req.body;
@@ -29,8 +34,24 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(409, "User already exists");
   }
 
+  const getUsername = convertToUsername(username);
+
+  const result = await registerSchema.safeParseAsync({
+    username: getUsername,
+    email,
+    password,
+  });
+
+  if (!result.success) {
+    throw new ApiError(
+      400,
+      "Invalid input",
+      result.error?.flatten().fieldErrors
+    );
+  }
+
   const create = await User.create({
-    username: username.trim().toLowerCase(),
+    username: getUsername.trim().toLowerCase(),
     email: email.trim().toLowerCase(),
     password,
   });
@@ -77,9 +98,24 @@ const loginUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Credentials are required");
   }
 
+  if(username.includes(" ")){
+    throw new ApiError(400, "Invalid credentials")
+  }
+
   const query = email
     ? { email: email.trim().toLowerCase() }
     : { username: username.trim().toLowerCase() };
+
+  const result = await loginSchema.safeParseAsync({...query, password});
+
+  if (!result.success) {
+    throw new ApiError(
+      400,
+      "Invalid input",
+      result.error?.flatten().fieldErrors
+    );
+  }
+
 
   const user = await User.findOne(query).select("+password");
 
@@ -371,9 +407,9 @@ const deleteAvatar = asyncHandler(async (req, res) => {
   user.avatar = null;
   await user.save();
 
-  return res.status(200).json(
-    new ApiResponse(200, null, "Avatar deleted successfully.")
-  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, null, "Avatar deleted successfully."));
 });
 
 const deleteCoverImage = asyncHandler(async (req, res) => {
@@ -402,9 +438,9 @@ const deleteCoverImage = asyncHandler(async (req, res) => {
   user.coverImage = null;
   await user.save();
 
-  return res.status(200).json(
-    new ApiResponse(200, null, "Cover image deleted successfully.")
-  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, null, "Cover image deleted successfully."));
 });
 
 const getUserProfile = asyncHandler(async (req, res) => {
@@ -561,5 +597,5 @@ export {
   deleteAccount,
   refreshAccessToken,
   deleteAvatar,
-  deleteCoverImage
+  deleteCoverImage,
 };

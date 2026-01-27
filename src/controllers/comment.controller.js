@@ -5,6 +5,7 @@ import { Tweet } from "../models/tweet.model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Comment } from "../models/comment.model.js";
 import { Notification } from "../models/notification.model.js";
+import { commentSchema } from "../schemas/comment.schema.js";
 
 // ==================PUBLIC ROUTE========================
 const getTweetComments = asyncHandler(async (req, res) => {
@@ -178,6 +179,11 @@ const createComment = asyncHandler(async (req, res) => {
     throw new ApiError(400, "content is required");
   }
 
+  const result = await commentSchema.safeParseAsync({content})
+  if(!(result.success)){
+    throw new ApiError(400, "content is required", result.error?.flatten().fieldErrors)
+  }
+
   const comment = await Comment.create({
     owner: userId,
     content: content.trim(),
@@ -221,6 +227,11 @@ const updateComment = asyncHandler(async (req, res) => {
 
   if (!content || !content.trim()) {
     throw new ApiError(400, "content is required");
+  }
+
+  const result = await commentSchema.safeParseAsync({content})
+  if(!(result.success)){
+    throw new ApiError(400, "content is required", result.error?.flatten().fieldErrors)
   }
 
   const comment = await Comment.findOneAndUpdate(
@@ -311,6 +322,11 @@ const createReplyOnComment = asyncHandler(async (req, res) => {
 
   if (!content || !content.trim()) {
     throw new ApiError(400, "content is required.");
+  }
+
+  const result = await commentSchema.safeParseAsync({content})
+  if(!(result.success)){
+    throw new ApiError(400, "content is required", result.error?.flatten().fieldErrors)
   }
 
   const parentComment = await Comment.findOne({

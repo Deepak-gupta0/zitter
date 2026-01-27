@@ -2,7 +2,8 @@ import mongoose from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
-  getMentionedUserNames, extractHashtags
+  getMentionedUserNames,
+  extractHashtags,
 } from "../utils/UtilityFunctions.js";
 import { Tweet } from "../models/tweet.model.js";
 import { uploadOnCloudinary } from "../utils/Cloudinary.js";
@@ -15,6 +16,7 @@ import { Comment } from "../models/comment.model.js";
 import { Hashtag } from "../models/hashtag.model.js";
 import { HashtagTweet } from "../models/hashtagTweet.model.js";
 import { Notification } from "../models/notification.model.js";
+import { tweetSchema } from "../schemas/tweet.schems.js";
 
 //PUBLIC CONTROLLERS
 const getUserTweets = asyncHandler(async (req, res) => {
@@ -426,6 +428,14 @@ const createTweet = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Tweet cannot be empty");
   }
 
+  if (content) {
+    const result = await tweetSchema.safeParseAsync({ content });
+
+    if(!(result.success)){
+      throw new ApiError(400, "content excessed its limit.", result.error?.flatten().fieldErrors)
+    }
+  }
+
   if (files.length > 5) {
     throw new ApiError(400, "Maximum 5 media files allowed");
   }
@@ -548,6 +558,14 @@ const updateTweet = asyncHandler(async (req, res) => {
   // 3️⃣ Validate content
   if (!content || !content.trim()) {
     throw new ApiError(400, "Tweet content cannot be empty");
+  }
+
+   if (content) {
+    const result = await tweetSchema.safeParseAsync({ content });
+
+    if(!(result.success)){
+      throw new ApiError(400, "content excessed its limit.", result.error?.flatten().fieldErrors)
+    }
   }
 
   // 4️⃣ Update tweet (owner check included)

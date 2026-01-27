@@ -24,4 +24,8 @@ const getPublicIdOfFile = (imageUrl) => {
   return publicId;
 };
 
-export { getMentionedUserNames, extractHashtags, getPublicIdOfFile };
+const convertToUsername = (name) => {
+  return name.trim().toLowerCase().replace(/\s+/g, "");
+};
+
+export { getMentionedUserNames, extractHashtags, getPublicIdOfFile, convertToUsername };
