@@ -58,6 +58,7 @@ const tweetSchema = new mongoose.Schema(
     quoteCount: { type: Number, default: 0, min: 0 },
     likesCount: { type: Number, default: 0, min: 0 },
     viewCount: { type: Number, default: 0, min: 0 },
+    bookmarksCount: { type: Number, default: 0, min: 0 },
 
     isPublished: {
       type: Boolean,

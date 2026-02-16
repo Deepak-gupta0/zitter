@@ -13,43 +13,65 @@ const toggleBookmark = asyncHandler(async (req, res) => {
   const { tweetId } = req.params;
 
   if (!mongoose.Types.ObjectId.isValid(tweetId)) {
-    throw new ApiError(400, "Tweet id is invalid");
+    throw new ApiError(400, "Invalid tweet id");
   }
 
-  const tweet = await Tweet.exists({
+  const tweet = await Tweet.findOne({
     _id: tweetId,
     isDeleted: false,
     isPublished: true,
   });
 
   if (!tweet) {
-    throw new ApiError(404, "Tweet not found.");
+    throw new ApiError(404, "Tweet not found");
   }
 
-  const existedBookmark = await Bookmark.exists({
+  // 🔍 Check if bookmark already exists
+  const existingBookmark = await Bookmark.findOne({
     user: req.user._id,
     tweet: tweetId,
   });
 
-  if (!existedBookmark) {
-    await Bookmark.create({ user: req.user._id, tweet: tweetId });
+  // ===============================
+  // 🔁 REMOVE BOOKMARK
+  // ===============================
+  if (existingBookmark) {
+    await Promise.all([
+      Bookmark.deleteOne({ _id: existingBookmark._id }),
 
-    return res
-      .status(201)
-      .json(new ApiResponse(201, { bookmarked: true }, "Tweet is bookmarked"));
-  }
+      Tweet.updateOne(
+        { _id: tweetId, bookmarksCount: { $gt: 0 } },
+        { $inc: { bookmarksCount: -1 } }
+      ),
+    ]);
 
-  await Bookmark.findOneAndDelete({ user: req.user._id, tweet: tweetId });
-
-  return res
-    .status(200)
-    .json(
+    return res.status(200).json(
       new ApiResponse(
         200,
         { bookmarked: false },
-        "Tweet is removed from bookmark"
+        "Tweet removed from bookmarks"
       )
     );
+  }
+
+  // ===============================
+  // ➕ ADD BOOKMARK
+  // ===============================
+  await Promise.all([
+    Bookmark.create({
+      user: req.user._id,
+      tweet: tweetId,
+    }),
+
+    Tweet.updateOne(
+      { _id: tweetId },
+      { $inc: { bookmarksCount: 1 } }
+    ),
+  ]);
+
+  return res.status(201).json(
+    new ApiResponse(201, { bookmarked: true }, "Tweet bookmarked")
+  );
 });
 
 const getMyBookmarks = asyncHandler(async (req, res) => {
@@ -230,4 +252,10 @@ const clearAllBookmarks = asyncHandler(async (req, res) => {
     );
 });
 
-export { toggleBookmark, getMyBookmarks, getBookmarkStatus, removeBookmark, clearAllBookmarks };
+export {
+  toggleBookmark,
+  getMyBookmarks,
+  getBookmarkStatus,
+  removeBookmark,
+  clearAllBookmarks,
+};

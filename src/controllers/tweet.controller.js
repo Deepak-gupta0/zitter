@@ -17,6 +17,7 @@ import { Hashtag } from "../models/hashtag.model.js";
 import { HashtagTweet } from "../models/hashtagTweet.model.js";
 import { Notification } from "../models/notification.model.js";
 import { tweetSchema } from "../schemas/tweet.schems.js";
+import { Subscription } from "../models/subscription.model.js";
 
 //PUBLIC CONTROLLERS
 const getUserTweets = asyncHandler(async (req, res) => {
@@ -94,7 +95,7 @@ const getUserTweets = asyncHandler(async (req, res) => {
 });
 
 const getHomeTweets = asyncHandler(async (req, res) => {
-  const limit = Number(req.query.limit) || 20;
+  const limit = Number(req.query.limit) || 5;
   const { cursor } = req.query;
 
   let matchStage = {
@@ -104,12 +105,14 @@ const getHomeTweets = asyncHandler(async (req, res) => {
 
   // 🔐 LOGGED-IN → personalized feed
   if (req.user?._id) {
-    const followingDocs = await Follow.find({
+    const followingDocs = await Subscription.find({
       follower: req.user._id,
-    }).select("following");
+    }).select("channel");
+    // console.log(followingDocs)
 
-    const ownerIds = followingDocs.map((f) => f.following);
+    const ownerIds = followingDocs.map((f) => f.channel);
     ownerIds.push(req.user._id);
+    // console.log(ownerIds)
 
     matchStage.owner = { $in: ownerIds };
   }
@@ -424,15 +427,19 @@ const createTweet = asyncHandler(async (req, res) => {
   const files = req.files || [];
   const content = req.body.content?.trim() || "";
 
-  if (!content && files.length === 0) {
-    throw new ApiError(400, "Tweet cannot be empty");
+  if (!content?.trim() && files.length === 0) {
+    throw new ApiError(400, "Content or file is required");
   }
 
   if (content) {
     const result = await tweetSchema.safeParseAsync({ content });
 
-    if(!(result.success)){
-      throw new ApiError(400, "content excessed its limit.", result.error?.flatten().fieldErrors)
+    if (!result.success) {
+      throw new ApiError(
+        400,
+        "content excessed its limit.",
+        result.error?.flatten().fieldErrors
+      );
     }
   }
 
@@ -473,7 +480,7 @@ const createTweet = asyncHandler(async (req, res) => {
     owner: req.user._id,
     media: media.length ? media : undefined,
     type: "TWEET",
-    content,
+    content: content.slice(0, 280),
   });
 
   // 🔹 save mentions + 🔔 notifications
@@ -560,11 +567,15 @@ const updateTweet = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Tweet content cannot be empty");
   }
 
-   if (content) {
+  if (content) {
     const result = await tweetSchema.safeParseAsync({ content });
 
-    if(!(result.success)){
-      throw new ApiError(400, "content excessed its limit.", result.error?.flatten().fieldErrors)
+    if (!result.success) {
+      throw new ApiError(
+        400,
+        "content excessed its limit.",
+        result.error?.flatten().fieldErrors
+      );
     }
   }
 
@@ -692,6 +703,99 @@ const pinTweetToggle = asyncHandler(async (req, res) => {
     );
 });
 
+const getFollowingTweets = asyncHandler(async (req, res) => {
+  if (!req.user?._id) {
+    throw new ApiError(401, "Unauthorised request.");
+  }
+
+  const limit = Number(req.query.limit) || 5;
+  const { cursor } = req.query;
+
+  let matchStage = {
+    isPublished: true,
+    isDeleted: false,
+  };
+
+  /*
+  
+  [
+    {
+      _id: "8458956",   
+      channel: OBJ.Id
+    },
+    {
+      _id: "8458956",   
+      channel: OBJ.Id
+    },
+    {
+      _id: "8458956",   
+      channel: OBJ.Id
+    }]
+
+  */
+
+  const followingDocs = await Subscription.find({
+    follower: req.user._id,
+  }).select("channel");
+
+  const ownerIds = followingDocs.map((obj) => obj.channel);
+
+  matchStage.owner = { $in: ownerIds };
+
+    // 🌍 PUBLIC → cursor based
+  if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
+    matchStage._id = { $lt: new mongoose.Types.ObjectId(cursor) };
+  }
+
+  const tweets = await Tweet.aggregate([
+    { $match: matchStage },
+    { $sort: { _id: -1 } },
+    { $limit: limit + 1 },
+    {
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "owner",
+        pipeline: [
+          { $match: { isActive: true } },
+          {
+            $project: {
+              _id: 1,
+              username: 1,
+              fullName: 1,
+              avatar: 1,
+            },
+          },
+        ],
+      },
+    },
+    { $unwind: "$owner" },
+  ]);
+
+  let hasMore = false;
+  if (tweets.length > limit) {
+    hasMore = true;
+    tweets.pop();
+  }
+
+  const nextCursor = hasMore ? tweets[tweets.length - 1]._id : null;
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        tweets,
+        pagination: {
+          limit,
+          hasMore,
+          nextCursor,
+        },
+      },
+      "Follwing feed fetched successfully"
+    )
+  );
+});
 export {
   createTweet,
   updateTweet,
@@ -702,4 +806,5 @@ export {
   getHomeTweets,
   getUserTweets,
   searchTweets,
+  getFollowingTweets
 };
